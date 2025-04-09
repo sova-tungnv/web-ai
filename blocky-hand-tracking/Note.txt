@@ -1,0 +1,19 @@
+Thêm khả năng xoay khối bằng cách tính góc giữa ngón trỏ và ngón cái.
+Thêm hiệu ứng âm thanh khi kéo-thả khối.
+
+================
+Các khối trong toolbox chỉ là các "mẫu" (block templates) được định nghĩa trong XML. Chúng không phải là các instance của khối (block instances) cho đến khi được kéo vào main workspace
+
+Để kéo một khối từ toolbox vào main workspace, bạn cần:
+Phát hiện khi ngón tay của người dùng (qua camera) di chuyển đến vị trí của một khối trong toolbox.
+Khi người dùng "chọn" khối (bằng cách chạm ngón trỏ và ngón cái), tạo một instance mới của khối đó và thêm nó vào main workspace.
+Cho phép người dùng kéo khối mới này trong main workspace.
+
+
+========== GIẢI PHÁP=========
+Giải pháp: Kéo khối từ toolbox vào main workspace
+
+1. Phát hiện các khối trong toolbox: Lấy danh sách các phần tử SVG của các khối trong toolbox và tính toán tọa độ của chúng.
+2. Phát hiện khi ngón tay nằm trong vùng của một khối trong toolbox: So sánh tọa độ của ngón tay (fingerX, fingerY) với tọa độ của các khối trong toolbox.
+3. Tạo và thêm khối vào main workspace: Khi người dùng "chọn" một khối trong toolbox (bằng cách chạm ngón trỏ và ngón cái), tạo một instance mới của khối đó và thêm vào main workspace.
+4. Kéo khối trong main workspace: Sau khi khối được thêm vào main workspace, sử dụng logic kéo-thả hiện tại để di chuyển nó.

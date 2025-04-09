@@ -1,0 +1,35 @@
+.container {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+  }
+  
+  .blocklyDiv {
+    width: 80%;
+    height: 100vh;
+    border-right: 2px solid #ccc;
+  }
+  
+  .videoCanvas {
+    width: 20%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #f0f0f0;
+  }
+  
+  .canvas {
+    width: 320px; /* Khớp với kích thước canvas */
+    height: 180px;
+    border: 1px solid #333;
+    margin-top: 20px;
+  }
+  
+  .instructions {
+    padding: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #333;
+  }

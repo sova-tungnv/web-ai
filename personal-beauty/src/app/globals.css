@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* styles/globals.css */
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.menu-item {
+  text-align: center;
+  font-weight: 600;
+  padding: 1.5rem 2rem;
+  border-radius: 0.75rem;
+  transition: all 0.3s ease;
+  color: white;
+  font-size: 1.5rem;
+  background-color: #f472b6; /* bg-pink-400 */
+}
+
+.menu-item.hover {
+  background-color: #db2777; /* bg-pink-600 */
+  transform: scale(1.1); /* scale-110 */
+  border: 4px solid #be185d; /* border-4 border-pink-800 */
+}

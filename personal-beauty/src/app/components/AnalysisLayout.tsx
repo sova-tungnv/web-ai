@@ -1,4 +1,3 @@
-// src/components/AnalysisLayout.tsx
 "use client";
 
 import { RefObject } from "react";
@@ -10,9 +9,11 @@ interface AnalysisLayoutProps {
   canvasRef: RefObject<HTMLCanvasElement>;
   result: string | null;
   error: string | null;
-  selectionButtons?: JSX.Element; // Nút lựa chọn khu vực
-  colorPalette?: JSX.Element; // Bảng màu
-  actionButtons?: JSX.Element; // Nút hành động (Capture, Save)
+  selectionButtons?: JSX.Element;
+  colorPalette?: JSX.Element;
+  actionButtons?: JSX.Element;
+  statusMessage?: string; // Thêm prop cho thông báo trạng thái
+  progress?: number; // Thêm prop cho thanh tiến trình
 }
 
 export default function AnalysisLayout({
@@ -25,6 +26,8 @@ export default function AnalysisLayout({
   selectionButtons,
   colorPalette,
   actionButtons,
+  statusMessage,
+  progress,
 }: AnalysisLayoutProps) {
   return (
     <div className="flex flex-col gap-8 min-h-[calc(100vh-2rem)] p-4 md:p-8 overflow-hidden bg-gradient-to-r from-pink-100 to-purple-100">
@@ -33,10 +36,23 @@ export default function AnalysisLayout({
           {error}
         </div>
       )}
+      {/* Hiển thị status message và progress bar */}
+      {statusMessage && (
+        <div className="absolute top-4 left-4 bg-blue-500 text-white p-2 rounded-lg shadow-md">
+          {statusMessage}
+          {progress !== undefined && progress > 0 && (
+            <div className="w-32 h-2 bg-gray-300 rounded mt-2">
+              <div
+                className="h-full bg-green-500 rounded"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
       <div className="flex flex-col md:flex-row gap-6 md:gap-8 flex-1 overflow-hidden">
         {/* Phần video live (2/3) */}
         <div className="md:w-2/3 p-4 md:p-6 rounded-xl flex flex-row items-center">
-          {/* Video live (chính giữa) */}
           <div className="relative max-w-[480px] aspect-[9/16] mx-auto rounded-2xl overflow-hidden shadow-lg border-4 border-gray-200">
             <video
               ref={videoRef}
@@ -52,7 +68,6 @@ export default function AnalysisLayout({
               className="inset-0 w-full h-full object-contain pointer-events-none"
             />
           </div>
-          {/* Nút lựa chọn khu vực (bên phải video) */}
           {selectionButtons && (
             <div className="flex flex-col gap-6 ml-6">
               {selectionButtons}
@@ -77,7 +92,6 @@ export default function AnalysisLayout({
               Waiting for analysis...
             </p>
           )}
-          {/* Bảng màu */}
           {colorPalette && (
             <div className="flex-1">
               <h3 className="text-lg md:text-xl font-semibold text-gray-800 mb-4">
@@ -86,7 +100,6 @@ export default function AnalysisLayout({
               {colorPalette}
             </div>
           )}
-          {/* Nút hành động */}
           {actionButtons && (
             <div className="mt-4 flex flex-col gap-4">
               {actionButtons}

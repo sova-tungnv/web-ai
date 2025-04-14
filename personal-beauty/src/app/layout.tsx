@@ -1,6 +1,7 @@
 // src/app/layout.tsx
 import type { Metadata } from "next";
-import HandControlledApp from "./components/HandControlledApp";
+import { WebcamProvider } from "./context/WebcamContext";
+import { LoadingProvider } from "./context/LoadingContext";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <HandControlledApp>{children}</HandControlledApp>
+        <WebcamProvider>
+          <LoadingProvider>
+            {children}
+          </LoadingProvider>
+        </WebcamProvider>
       </body>
     </html>
   );

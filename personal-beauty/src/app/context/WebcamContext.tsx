@@ -1,4 +1,5 @@
-// src/context/WebcamContext.tsx
+// src/app/context/WebcamContext.tsx
+
 "use client";
 
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
@@ -18,7 +19,8 @@ interface WebcamContextType {
   restartStream: () => Promise<void>;
   handData: HandData;
   setIsHandDetectionEnabled: (enabled: boolean) => void;
-  isTwoFingersRaised: boolean; // Thêm để phát hiện cử chỉ giơ 2 ngón tay
+  isIndexFingerRaised: boolean;
+  isHandDetectionEnabled: boolean; // Thêm để đồng bộ
 }
 
 const WebcamContext = createContext<WebcamContextType | undefined>(undefined);
@@ -39,6 +41,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isHandLandmarkerReady, setIsHandLandmarkerReady] = useState(false);
   const animationFrameId = useRef<number | null>(null);
   const lastDetectTime = useRef(0);
+  const lastUpdateTime = useRef(0);
   const positionHistory = useRef<{ x: number; y: number }[]>([]);
   const HISTORY_SIZE = 5;
   const lastPositionBeforeFist = useRef<{ x: number; y: number } | null>(null);
@@ -48,13 +51,16 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     isFist: false,
     isOpenHand: false,
   });
-  const [isHandDetectionEnabled, setIsHandDetectionEnabled] = useState(true);
-  const [isTwoFingersRaised, setIsTwoFingersRaised] = useState(false); // State để theo dõi cử chỉ giơ 2 ngón tay
+  const [isHandDetectionEnabled, setIsHandDetectionEnabled] = useState(true); // Đặt mặc định là false
+  const [isIndexFingerRaised, setIsIndexFingerRaised] = useState(false);
 
   const startStream = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
       });
       setStream(mediaStream);
     } catch (err) {
@@ -80,7 +86,6 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
-  // Đảm bảo stream được gán vào videoRef.current
   useEffect(() => {
     if (stream && videoRef.current) {
       videoRef.current.srcObject = stream;
@@ -132,7 +137,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     if (!isHandLandmarkerReady || !stream || !videoRef.current) {
-      console.log("[WebcamProvider] Waiting for HandLandmarker or webcam...", isHandLandmarkerReady, stream, videoRef.current);
+      console.log("[WebcamProvider] Waiting for HandLandmarker or webcam...");
       return;
     }
 
@@ -142,10 +147,10 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const waitForVideoReady = async () => {
       while (retries > 0 && video.readyState < 4) {
+        console.log("[WebcamProvider] Video not ready, waiting... readyState:", video.readyState, "retries left:", retries);
         await new Promise((resolve) => setTimeout(resolve, 2000));
         retries--;
         if (video.readyState < 4) {
-          console.log("[WebcamProvider] Video not ready, retrying... readyState:", video.readyState, "retries left:", retries);
           await restartStream();
         }
       }
@@ -153,8 +158,6 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setError("Failed to load webcam video for hand detection. Please check your camera and refresh the page.");
         return false;
       }
-
-      // Chỉ log một lần khi video sẵn sàng
       if (!hasLoggedReady) {
         console.log("[WebcamProvider] Video ready, readyState:", video.readyState);
         hasLoggedReady = true;
@@ -162,10 +165,10 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return true;
     };
 
+    // Thay đổi tốc độ phát hiện cho gesture và full
     const detectGesture = async () => {
-      // Chế độ phát hiện cử chỉ (nhẹ) - chỉ để phát hiện cử chỉ giơ 2 ngón tay
       const now = performance.now();
-      if (now - lastDetectTime.current < 100) { // 10 FPS (1000ms / 10 = 100ms)
+      if (now - lastDetectTime.current < 100) {
         animationFrameId.current = requestAnimationFrame(detectGesture);
         return;
       }
@@ -187,17 +190,34 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const results = await handLandmarkerRef.current.detectForVideo(video, performance.now());
         if (results.landmarks && results.landmarks.length > 0) {
           const landmarks = results.landmarks[0];
-          // Phát hiện cử chỉ giơ 2 ngón tay (ngón trỏ và ngón giữa giơ lên, các ngón khác cụp xuống)
-          const THRESHOLD = 0.05; // Ngưỡng để đảm bảo ngón tay giơ lên/cụp xuống rõ ràng
+          const THRESHOLD = 0.05;
           const isIndexRaised = landmarks[8].y < landmarks[5].y - THRESHOLD;
-          const isMiddleRaised = landmarks[12].y < landmarks[9].y - THRESHOLD;
-          const isRingFolded = landmarks[16].y > landmarks[13].y + THRESHOLD;
-          const isPinkyFolded = landmarks[20].y > landmarks[17].y + THRESHOLD;
-          const isThumbFolded = landmarks[4].y > landmarks[2].y; // Ngón cái không giơ lên
-          const isTwoFingers = isIndexRaised && isMiddleRaised && isRingFolded && isPinkyFolded && isThumbFolded;
-          setIsTwoFingersRaised(isTwoFingers);
+
+          // Chỉ cần ngón trỏ giơ lên là đủ
+          const isIndexFingerOnly = isIndexRaised;
+
+          setIsIndexFingerRaised(isIndexFingerOnly);
+
+          console.log("[WebcamProvider] Index finger detection details:", {
+            isIndexRaised,
+            indexY: landmarks[8].y,
+            indexBaseY: landmarks[5].y,
+            isIndexFingerOnly,
+          });
+
+          setHandData((prev) => ({
+            ...prev,
+            isHandDetected: true,
+          }));
         } else {
-          setIsTwoFingersRaised(false);
+          console.log("[WebcamProvider] No hand detected, setting isIndexFingerRaised to false");
+          setIsIndexFingerRaised(false);
+          setHandData({
+            isHandDetected: false,
+            cursorPosition: { x: 0, y: 0 },
+            isFist: false,
+            isOpenHand: false,
+          });
         }
       } catch (err) {
         console.error("[WebcamProvider] Error during gesture detection:", err);
@@ -208,17 +228,17 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       animationFrameId.current = requestAnimationFrame(detectGesture);
     };
 
-    const detect = async () => {
+    const detectFull = async () => {
       const now = performance.now();
       if (now - lastDetectTime.current < 33) { // 30 FPS (1000ms / 30 = 33ms)
-        animationFrameId.current = requestAnimationFrame(detect);
+        animationFrameId.current = requestAnimationFrame(detectFull);
         return;
       }
       lastDetectTime.current = now;
 
       if (!handLandmarkerRef.current) {
         console.log("[WebcamProvider] HandLandmarker not initialized, skipping detection...");
-        animationFrameId.current = requestAnimationFrame(detect);
+        animationFrameId.current = requestAnimationFrame(detectFull);
         return;
       }
 
@@ -230,24 +250,19 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       try {
         const results = await handLandmarkerRef.current.detectForVideo(video, performance.now());
-
         if (results.landmarks && results.landmarks.length > 0) {
           const landmarks = results.landmarks[0];
           const indexFingerTip = landmarks[8];
-
           const videoWidth = video.videoWidth;
           const videoHeight = video.videoHeight;
-
           const scaleX = window.innerWidth / videoWidth;
           const scaleY = window.innerHeight / videoHeight;
-
           const adjustedX = indexFingerTip.x * videoWidth * scaleX;
           const adjustedY = indexFingerTip.y * videoHeight * scaleY;
-
           const clampedX = Math.max(0, Math.min(adjustedX, window.innerWidth - 1));
           const clampedY = Math.max(0, Math.min(adjustedY, window.innerHeight - 1));
 
-          const THRESHOLD = 0.05; // Ngưỡng để đảm bảo ngón tay giơ lên/cụp xuống
+          const THRESHOLD = 0.05;
           const distanceIndex = Math.sqrt(
             Math.pow(landmarks[8].x - landmarks[5].x, 2) +
             Math.pow(landmarks[8].y - landmarks[5].y, 2)
@@ -257,11 +272,23 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             Math.pow(landmarks[12].y - landmarks[9].y, 2)
           );
           const isFist = distanceIndex < 0.1 && distanceMiddle < 0.1;
-          const isOpenHand = landmarks[4].y < landmarks[2].y - THRESHOLD &&  
-                            landmarks[8].y < landmarks[5].y - THRESHOLD &&
-                            landmarks[12].y < landmarks[9].y - THRESHOLD &&
-                            landmarks[16].y < landmarks[13].y - THRESHOLD &&
-                            landmarks[20].y < landmarks[17].y - THRESHOLD;
+          const isOpenHand =
+            landmarks[8].y < landmarks[5].y - THRESHOLD &&
+            landmarks[12].y < landmarks[9].y - THRESHOLD &&
+            landmarks[16].y < landmarks[13].y - THRESHOLD &&
+            landmarks[20].y < landmarks[17].y - THRESHOLD;
+
+          // Kiểm tra ngón trỏ trong detectFull để cập nhật isIndexFingerRaised
+          const isIndexRaised = landmarks[8].y < landmarks[5].y - THRESHOLD;
+          const isIndexFingerOnly = isIndexRaised;
+          setIsIndexFingerRaised(isIndexFingerOnly);
+
+          console.log("[WebcamProvider] Index finger detection in detectFull:", {
+            isIndexRaised,
+            indexY: landmarks[8].y,
+            indexBaseY: landmarks[5].y,
+            isIndexFingerOnly,
+          });
 
           let currentPosition: { x: number; y: number };
           if (isFist) {
@@ -276,7 +303,6 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (positionHistory.current.length > HISTORY_SIZE) {
               positionHistory.current.shift();
             }
-
             const avgPosition = positionHistory.current.reduce(
               (acc: any, pos: any) => ({
                 x: acc.x + pos.x / positionHistory.current.length,
@@ -284,7 +310,10 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               }),
               { x: 0, y: 0 }
             );
-            currentPosition = avgPosition;
+            currentPosition = {
+              x: Math.round(avgPosition.x * 100) / 100,
+              y: Math.round(avgPosition.y * 100) / 100,
+            };
             lastPositionBeforeFist.current = null;
           }
 
@@ -295,38 +324,50 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             isOpenHand,
           };
 
-          // Chỉ gọi setHandData nếu dữ liệu thay đổi
-          setHandData((prev: any) => {
-            if (
-              prev.isHandDetected === newHandData.isHandDetected &&
-              prev.cursorPosition.x === newHandData.cursorPosition.x &&
-              prev.cursorPosition.y === newHandData.cursorPosition.y &&
-              prev.isFist === newHandData.isFist &&
-              prev.isOpenHand === newHandData.isOpenHand
-            ) {
-              return prev; // Không thay đổi, trả về state cũ
-            }
-            return newHandData; // Có thay đổi, cập nhật state mới
-          });
+          if (now - lastUpdateTime.current >= 100) {
+            setHandData((prev) => {
+              const positionThreshold = 1;
+              const positionChanged =
+                Math.abs(prev.cursorPosition.x - newHandData.cursorPosition.x) > positionThreshold ||
+                Math.abs(prev.cursorPosition.y - newHandData.cursorPosition.y) > positionThreshold;
+
+              if (
+                prev.isHandDetected === newHandData.isHandDetected &&
+                !positionChanged &&
+                prev.isFist === newHandData.isFist &&
+                prev.isOpenHand === newHandData.isOpenHand
+              ) {
+                return prev;
+              }
+              lastUpdateTime.current = now;
+              return newHandData;
+            });
+          }
         } else {
+          console.log("[WebcamProvider] No hand detected in detectFull, resetting handData");
+          setIsIndexFingerRaised(false); // Đặt lại isIndexFingerRaised khi không phát hiện tay
           const newHandData = {
             isHandDetected: false,
             cursorPosition: { x: 0, y: 0 },
             isFist: false,
             isOpenHand: false,
           };
-          setHandData((prev: any) => {
-            if (
-              prev.isHandDetected === newHandData.isHandDetected &&
-              prev.cursorPosition.x === newHandData.cursorPosition.x &&
-              prev.cursorPosition.y === newHandData.cursorPosition.y &&
-              prev.isFist === newHandData.isFist &&
-              prev.isOpenHand === newHandData.isOpenHand
-            ) {
-              return prev;
-            }
-            return newHandData;
-          });
+
+          if (now - lastUpdateTime.current >= 100) {
+            setHandData((prev) => {
+              if (
+                prev.isHandDetected === newHandData.isHandDetected &&
+                prev.cursorPosition.x === newHandData.cursorPosition.x &&
+                prev.cursorPosition.y === newHandData.cursorPosition.y &&
+                prev.isFist === newHandData.isFist &&
+                prev.isOpenHand === newHandData.isOpenHand
+              ) {
+                return prev;
+              }
+              lastUpdateTime.current = now;
+              return newHandData;
+            });
+          }
         }
       } catch (err) {
         console.error("[WebcamProvider] Error during hand detection:", err);
@@ -334,12 +375,14 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         await restartStream();
       }
 
-      animationFrameId.current = requestAnimationFrame(detect);
+      animationFrameId.current = requestAnimationFrame(detectFull);
     };
 
     if (isHandDetectionEnabled) {
-      detect();
+      console.log("[WebcamProvider] Switching to detectFull mode");
+      detectFull();
     } else {
+      console.log("[WebcamProvider] Switching to detectGesture mode");
       detectGesture();
     }
 
@@ -351,7 +394,18 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [isHandLandmarkerReady, stream, isHandDetectionEnabled]);
 
   return (
-    <WebcamContext.Provider value={{ stream, videoRef, error, restartStream, handData, setIsHandDetectionEnabled, isTwoFingersRaised }}>
+    <WebcamContext.Provider
+      value={{
+        stream,
+        videoRef,
+        error,
+        restartStream,
+        handData,
+        setIsHandDetectionEnabled,
+        isIndexFingerRaised,
+        isHandDetectionEnabled, // Truyền ra để đồng bộ
+      }}
+    >
       {children}
       <video ref={videoRef} className="hidden" />
     </WebcamContext.Provider>

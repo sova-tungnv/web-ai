@@ -1,7 +1,8 @@
-// src/components/HandControlledApp.tsx
+// src/context/HandControlledApp.tsx
+
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Sidebar from "./Sidebar";
 import { useWebcam } from "../context/WebcamContext";
 import { ViewType, VIEWS } from "../constants/views";
@@ -16,88 +17,21 @@ interface HandControlledAppProps {
 
 export default function HandControlledApp({ children, onMenuSelect }: HandControlledAppProps) {
   const { error: webcamError, handData } = useWebcam();
-  const { isLoading, setIsLoading } = useLoading(); // Sử dụng context
-  const [isHandDetected, setIsHandDetected] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
+  const { isLoading, setIsLoading } = useLoading();
   const [currentView, setCurrentView] = useState<ViewType>(VIEWS.HOME);
-  const fistDebounceTimeout = useRef<NodeJS.Timeout | null>(null);
-  const isClickPending = useRef(false);
-  const lastFistState = useRef(false);
-  const lastOpenHandState = useRef(false);
-  const lastClickPosition = useRef<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
-    console.log("[HandControlledApp] isHandDetected changed to:", isHandDetected);
-  }, [isHandDetected]);
+  const handleMenuSelect = (view: ViewType) => {
+    setIsLoading(true);
+    onMenuSelect(view);
+    setCurrentView(view);
+  };
 
-  useEffect(() => {
-    // Nếu đang loading, không xử lý cử chỉ tay
-    if (isLoading) {
-      setIsHandDetected(false); // Đặt lại để ẩn con trỏ
-      document.querySelectorAll(".menu-item").forEach((item) => {
-        item.classList.remove("hover");
-      });
-      return;
+  const handleOpenHand = () => {
+    if (currentView !== VIEWS.HOME) {
+      onMenuSelect(VIEWS.HOME);
+      setCurrentView(VIEWS.HOME);
     }
-
-    setIsHandDetected(handData.isHandDetected);
-    setCursorPosition(handData.cursorPosition);
-
-    if (handData.isHandDetected) {
-      const elements = document.elementsFromPoint(handData.cursorPosition.x, handData.cursorPosition.y);
-      const menuItem = elements.find((el) => el.classList.contains("menu-item"));
-
-      document.querySelectorAll(".menu-item").forEach((item) => {
-        item.classList.remove("hover");
-      });
-
-      if (menuItem) {
-        menuItem.classList.add("hover");
-      }
-
-      if (handData.isFist && !lastFistState.current && !isClickPending.current) {
-        lastFistState.current = true;
-        isClickPending.current = true;
-        lastClickPosition.current = { x: handData.cursorPosition.x, y: handData.cursorPosition.y };
-
-        fistDebounceTimeout.current = setTimeout(() => {
-          const element = document.elementFromPoint(
-            lastClickPosition.current!.x,
-            lastClickPosition.current!.y
-          );
-          if (element?.classList.contains("menu-item")) {
-            const view = element.getAttribute("data-view") as ViewType;
-            if (view) {
-              setIsLoading(true); // Bật loading qua context
-              onMenuSelect(view);
-              setCurrentView(view);
-            }
-          }
-          isClickPending.current = false;
-        }, 300);
-      } else if (!handData.isFist) {
-        lastFistState.current = false;
-
-        if (handData.isOpenHand && !lastOpenHandState.current && currentView !== VIEWS.HOME) {
-          lastOpenHandState.current = true;
-          onMenuSelect(VIEWS.HOME);
-          setCurrentView(VIEWS.HOME);
-        } else if (!handData.isOpenHand) {
-          lastOpenHandState.current = false;
-        }
-      }
-    } else {
-      document.querySelectorAll(".menu-item").forEach((item) => {
-        item.classList.remove("hover");
-      });
-      lastFistState.current = false;
-      lastOpenHandState.current = false;
-      isClickPending.current = false;
-      if (fistDebounceTimeout.current) {
-        clearTimeout(fistDebounceTimeout.current);
-      }
-    }
-  }, [handData, currentView, onMenuSelect, setIsLoading]);
+  };
 
   return (
     <div className="flex min-h-screen bg-gradient-to-r from-pink-100 to-purple-100 overflow-hidden">
@@ -106,19 +40,10 @@ export default function HandControlledApp({ children, onMenuSelect }: HandContro
           {webcamError}
         </div>
       )}
-      {isHandDetected && (
-        <div
-          className={`absolute w-8 h-8 rounded-full bg-pink-500 border-4 border-white pointer-events-none z-40 transition-all duration-50 ${isLoading ? "opacity-0" : "opacity-100"}`}
-          style={{
-            left: `${(cursorPosition.x / window.innerWidth) * 100}%`,
-            top: `${(cursorPosition.y / window.innerHeight) * 100}%`,
-          }}
-        />
-      )}
-      <Sidebar currentView={currentView} />
-      <main className="flex-1 p-0 overflow-hidden">
-        <HandControlProvider handData={handData}>{children}</HandControlProvider>
-      </main>
+      <HandControlProvider handData={handData} onOpenHand={handleOpenHand} isLoading={isLoading}>
+        <Sidebar currentView={currentView} onMenuSelect={handleMenuSelect} />
+        <main className="flex-1 p-0 overflow-hidden">{children(currentView)}</main>
+      </HandControlProvider>
       <LoadingOverlay isLoading={isLoading} />
     </div>
   );

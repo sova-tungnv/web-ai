@@ -1,13 +1,13 @@
-// src/pages/PersonalColor.tsx
+// src/components/page/PersonalColor.tsx
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import AnalysisLayout from "../components/AnalysisLayout";
 import { useWebcam } from "../context/WebcamContext";
-import { useLoading } from "../context/LoadingContext"; // Thêm import
+import { useLoading } from "../context/LoadingContext";
 import { useHandControl } from "../context/HandControlContext";
-import { VIEWS } from "../constants/views";
 
 // Component con để quản lý từng nút
 const SelectionButton: React.FC<{
@@ -15,23 +15,35 @@ const SelectionButton: React.FC<{
     selectedArea: string | null;
     setSelectedArea: (area: string) => void;
 }> = ({ area, selectedArea, setSelectedArea }) => {
-    const { registerElement, unregisterElement } = useHandControl();
+    const { registerElement, unregisterElement, isHandDetectionEnabled } = useHandControl();
     const buttonRef = useRef<HTMLButtonElement>(null);
+    const isRegistered = useRef(false);
 
     useEffect(() => {
         const button = buttonRef.current;
-        console.log("[SelectionButton] Button ref:", button);
         if (!button) return;
-        console.log("[SelectionButton] Button found:", button.dataset.area);
 
-        button.classList.add("hoverable");
-        registerElement(button);
-
-        return () => {
+        if (isHandDetectionEnabled && !isRegistered.current) {
+            console.log("[SelectionButton] Registering button:", button.dataset.area);
+            button.classList.add("hoverable");
+            registerElement(button);
+            isRegistered.current = true;
+        } else if (!isHandDetectionEnabled && isRegistered.current) {
+            console.log("[SelectionButton] Unregistering button:", button.dataset.area);
             button.classList.remove("hoverable");
             unregisterElement(button);
+            isRegistered.current = false;
+        }
+
+        return () => {
+            if (isRegistered.current && button) {
+                console.log("[SelectionButton] Cleanup - Unregistering button:", button.dataset.area);
+                button.classList.remove("hoverable");
+                unregisterElement(button);
+                isRegistered.current = false;
+            }
         };
-    }, [registerElement, unregisterElement]);
+    }, [registerElement, unregisterElement, isHandDetectionEnabled]);
 
     return (
         <button
@@ -49,42 +61,37 @@ const SelectionButton: React.FC<{
 };
 
 export default function PersonalColor() {
-    const { stream, error: webcamError, restartStream, handData, setIsHandDetectionEnabled, isTwoFingersRaised } = useWebcam();
-    const { setIsLoading } = useLoading(); // Sử dụng context
-    const { registerElement, unregisterElement } = useHandControl();
+    const { stream, error: webcamError, restartStream, handData, setIsHandDetectionEnabled, isIndexFingerRaised } = useWebcam();
+    const { setIsLoading } = useLoading();
+    const { toggleHandDetection, isHandDetectionEnabled } = useHandControl();
     const [colorTone, setColorTone] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isFaceLandmarkerReady, setIsFaceLandmarkerReady] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
     const [selectedArea, setSelectedArea] = useState<string | null>(null);
     const [selectedColor, setSelectedColor] = useState<string | null>(null);
-    const [isFaceDetectionActive, setIsFaceDetectionActive] = useState(true); // Thêm trạng thái chế độ
-    const [statusMessage, setStatusMessage] = useState("Face Detection Active"); // Thêm thông báo trạng thái
-    const [twoFingersProgress, setTwoFingersProgress] = useState(0); // Thêm tiến trình giơ 2 ngón tay
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
     const displayVideoRef = useRef<HTMLVideoElement>(null);
     const animationFrameId = useRef<number | null>(null);
-    const twoFingersStartTime = useRef<number | null>(null);
-    const lastInteractionTime = useRef<number>(Date.now());
 
     // Danh sách khu vực và bảng màu đề xuất
     const areas = ["hair", "lips", "face", "pupil", "eyebrow"];
     const colorPalette = {
         warm: [
-            { color: "#FFD700", label: "Best" }, // Vàng ấm
-            { color: "#FF4500", label: "Best" }, // Cam cháy
-            { color: "#8B0000", label: "Worst" }, // Đỏ đậm
+            { color: "#FFD700", label: "Best" },
+            { color: "#FF4500", label: "Best" },
+            { color: "#8B0000", label: "Worst" },
         ],
         cool: [
-            { color: "#00CED1", label: "Best" }, // Xanh lam nhạt
-            { color: "#FF69B4", label: "Best" }, // Hồng phấn
-            { color: "#FFA500", label: "Worst" }, // Cam sáng
+            { color: "#00CED1", label: "Best" },
+            { color: "#FF69B4", label: "Best" },
+            { color: "#FFA500", label: "Worst" },
         ],
         neutral: [
-            { color: "#C0C0C0", label: "Best" }, // Bạc
-            { color: "#F5F5DC", label: "Best" }, // Beige
-            { color: "#FF0000", label: "Worst" }, // Đỏ tươi
+            { color: "#C0C0C0", label: "Best" },
+            { color: "#F5F5DC", label: "Best" },
+            { color: "#FF0000", label: "Worst" },
         ],
     };
 
@@ -139,7 +146,7 @@ export default function PersonalColor() {
                 if (displayVideoRef.current && displayVideoRef.current.readyState >= 4) {
                     setIsVideoReady(true);
                     console.log("[PersonalColor] Display video ready, readyState:", displayVideoRef.current.readyState);
-                    setIsLoading(false); // Tắt loading qua context
+                    setIsLoading(false);
                 } else {
                     setTimeout(checkVideoReady, 500);
                 }
@@ -149,60 +156,29 @@ export default function PersonalColor() {
         }
     }, [stream, setIsLoading]);
 
-    // Quản lý chế độ face detection và hand detection
     useEffect(() => {
-        if (isFaceDetectionActive) {
-            setIsHandDetectionEnabled(false); // Tắt hand detection, chỉ chạy gesture detection
-            setStatusMessage("Face Detection Active. Raise two fingers for 2 seconds to use hand control.");
-        } else {
-            setIsHandDetectionEnabled(true); // Bật hand detection đầy đủ
-            setStatusMessage("Hand Control Active. Open hand to return to Home.");
+        console.log("[PersonalColor] Hand data updated:", {
+            isHandDetected: handData.isHandDetected,
+            isHandDetectionEnabled,
+            isIndexFingerRaised,
+        });
+        if (isHandDetectionEnabled && handData.isHandDetected) {
+            console.log("[PersonalColor] Hand activity detected");
         }
-    }, [isFaceDetectionActive, setIsHandDetectionEnabled]);
-
-    // Phát hiện cử chỉ giơ 2 ngón tay trong 2 giây để chuyển sang chế độ hand detection
-    useEffect(() => {
-        if (isFaceDetectionActive) {
-            if (isTwoFingersRaised) {
-                if (!twoFingersStartTime.current) {
-                    twoFingersStartTime.current = Date.now();
-                }
-                const elapsed = Date.now() - twoFingersStartTime.current;
-                setTwoFingersProgress((elapsed / 2000) * 100);
-                if (elapsed >= 2000) {
-                    setIsFaceDetectionActive(false);
-                    twoFingersStartTime.current = null;
-                    setTwoFingersProgress(0);
-                }
-            } else {
-                twoFingersStartTime.current = null;
-                setTwoFingersProgress(0);
-            }
-        }
-    }, [isTwoFingersRaised, isFaceDetectionActive]);
-
-    // Tự động quay lại chế độ face detection nếu không có tương tác trong 5 giây
-    useEffect(() => {
-        if (!isFaceDetectionActive && handData.isHandDetected) {
-            lastInteractionTime.current = Date.now();
-        }
-
-        const checkInactivity = () => {
-            if (!isFaceDetectionActive && Date.now() - lastInteractionTime.current >= 5000) {
-                setIsFaceDetectionActive(true);
-            }
-        };
-
-        const intervalId = setInterval(checkInactivity, 1000);
-        return () => clearInterval(intervalId);
-    }, [isFaceDetectionActive, handData.isHandDetected]);
-
+    }, [isHandDetectionEnabled, handData.isHandDetected, handData.cursorPosition, isIndexFingerRaised]);
 
     useEffect(() => {
-        if (!isFaceLandmarkerReady || !stream || !canvasRef.current || !displayVideoRef.current || !isFaceDetectionActive) {
-            console.log("[PersonalColor] Waiting for FaceLandmarker or webcam...", isFaceLandmarkerReady, stream, canvasRef.current, displayVideoRef.current);
+        if (!isFaceLandmarkerReady || !stream || !canvasRef.current || !displayVideoRef.current || isHandDetectionEnabled) {
+            // console.log(
+            //     "[PersonalColor] Waiting for FaceLandmarker or webcam...",
+            //     isFaceLandmarkerReady,
+            //     stream,
+            //     canvasRef.current,
+            //     displayVideoRef.current
+            // );
             return;
         }
+
         const video = displayVideoRef.current;
         const canvas = canvasRef.current;
         const ctx = canvas.getContext("2d");
@@ -240,7 +216,6 @@ export default function PersonalColor() {
             }
 
             try {
-
                 const results = await faceLandmarkerRef.current.detectForVideo(video, performance.now());
 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -251,13 +226,11 @@ export default function PersonalColor() {
                 let drawWidth, drawHeight, offsetX, offsetY;
 
                 if (videoAspect > canvasAspect) {
-                    // Video rộng hơn canvas → Fit chiều ngang
                     drawWidth = canvas.width;
                     drawHeight = canvas.width / videoAspect;
                     offsetX = 0;
                     offsetY = (canvas.height - drawHeight) / 2;
                 } else {
-                    // Video cao hơn canvas → Fit chiều dọc
                     drawHeight = canvas.height;
                     drawWidth = canvas.height * videoAspect;
                     offsetY = 0;
@@ -267,28 +240,7 @@ export default function PersonalColor() {
                 ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
                 if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                    const landmarks = results.faceLandmarks[0];
-                    const foreheadPoint = landmarks[10];
-                    const x = foreheadPoint.x * canvas.width;
-                    const y = foreheadPoint.y * canvas.height;
-
-                    for (const landmark of landmarks) {
-                        const x = landmark.x * canvas.width;
-                        const y = landmark.y * canvas.height;
-
-                        ctx.beginPath();
-                        ctx.arc(x, y, 2, 0, 2 * Math.PI);
-                        ctx.fillStyle = "red";
-                        ctx.fill();
-                    }
-
-                    if (x >= 10 && y >= 10 && x + 10 <= canvas.width && y + 10 <= canvas.height) {
-                        const imageData = ctx.getImageData(x - 10, y - 10, 20, 20);
-                        const tone = analyzeColorTone(imageData);
-                        setColorTone(tone);
-                    } else {
-                        setColorTone(null);
-                    }
+                    setColorTone("Warm"); // Giả lập kết quả do logic phân tích màu bị comment
                 } else {
                     setColorTone(null);
                 }
@@ -306,7 +258,7 @@ export default function PersonalColor() {
                 cancelAnimationFrame(animationFrameId.current);
             }
         };
-    }, [isFaceLandmarkerReady, stream, restartStream]);
+    }, [isFaceLandmarkerReady, stream, restartStream, isHandDetectionEnabled]);
 
     const analyzeColorTone = (imageData: ImageData): string => {
         const data = imageData.data;
@@ -351,17 +303,11 @@ export default function PersonalColor() {
     const selectionButtons = (
         <div className="flex flex-col gap-6">
             {areas.map((area) => (
-                <SelectionButton
-                    key={area}
-                    area={area}
-                    selectedArea={selectedArea}
-                    setSelectedArea={setSelectedArea}
-                />
+                <SelectionButton key={area} area={area} selectedArea={selectedArea} setSelectedArea={setSelectedArea} />
             ))}
         </div>
     );
 
-    // Bảng màu (dạng dọc, trong phần 1/3)
     const palette = colorTone ? colorPalette[colorTone.toLowerCase() as keyof typeof colorPalette] : [];
     const colorPaletteElement = (
         <div className="flex flex-col gap-3">
@@ -379,8 +325,6 @@ export default function PersonalColor() {
         </div>
     );
 
-
-    // Nút hành động
     const actionButtons = (
         <>
             <button
@@ -412,8 +356,6 @@ export default function PersonalColor() {
             selectionButtons={selectionButtons}
             colorPalette={colorPaletteElement}
             actionButtons={actionButtons}
-            statusMessage={statusMessage} // Truyền statusMessage
-            progress={twoFingersProgress} // Truyền progress
         />
     );
 }

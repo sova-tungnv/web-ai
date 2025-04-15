@@ -39,6 +39,11 @@ export default function AnalysisLayout({
       <div className="flex flex-col md:flex-row gap-6 md:gap-8 flex-1 overflow-hidden">
         {/* Phần video live (2/3) */}
         <div className="md:w-2/3 p-4 md:p-6 rounded-xl flex flex-row items-center">
+          {selectionButtons && (
+            <div className="flex flex-col gap-6 ml-6">
+              {selectionButtons}
+            </div>
+          )}
           <div className="relative max-w-[480px] aspect-[9/16] mx-auto rounded-2xl overflow-hidden shadow-lg border-4 border-gray-200">
             <video
               ref={videoRef}
@@ -54,11 +59,6 @@ export default function AnalysisLayout({
               className="inset-0 w-full h-full object-contain pointer-events-none"
             />
           </div>
-          {selectionButtons && (
-            <div className="flex flex-col gap-6 ml-6">
-              {selectionButtons}
-            </div>
-          )}
         </div>
 
         {/* Phần kết quả (1/3) */}

@@ -1,5 +1,3 @@
-// src/context/Sidebar.tsx
-
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -43,13 +41,34 @@ export default function Sidebar({ currentView, onMenuSelect }: SidebarProps) {
     };
   }, [registerElement, unregisterElement, currentView]);
 
+  // Hàm xử lý nhấn logo
+  const handleLogoClick = () => {
+    // Chỉ gọi onMenuSelect nếu không phải đang ở Home
+    if (currentView !== VIEWS.HOME) {
+      onMenuSelect(VIEWS.HOME);
+    } else {
+      console.log("[Sidebar] Already on Home view, but allowing re-selection");
+    }
+  };
+
+  // Hàm xử lý nhấn menu item
+  const handleMenuItemClick = (view: ViewType) => {
+    // Luôn cho phép chọn menu item, trừ khi view hiện tại đã là view đang chọn
+    if (currentView !== view) {
+      onMenuSelect(view);
+    } else {
+      console.log(`[Sidebar] Already on ${view} view, but allowing re-selection after Open Hand`);
+    }
+  };
+
   return (
     <div className="w-64 bg-pink-200 p-6 shadow-lg flex flex-col gap-4 relative z-10">
       <button
         ref={logoRef}
-        className="text-3xl font-bold text-pink-600 mb-6 cursor-pointer hover:text-pink-800 transition duration-300 focus:outline-none focus:ring-2 focus:ring-pink-600"
+        className={`text-3xl font-bold text-pink-600 mb-6 cursor-pointer hover:text-pink-800 transition duration-300 focus:outline-none focus:ring-2 focus:ring-pink-600 ${currentView === VIEWS.HOME ? "text-pink-800" : ""
+          }`} // Áp dụng style active cho logo
         data-view={VIEWS.HOME}
-        onClick={() => onMenuSelect(VIEWS.HOME)}
+        onClick={handleLogoClick}
       >
         Personal Beauty
       </button>
@@ -60,13 +79,14 @@ export default function Sidebar({ currentView, onMenuSelect }: SidebarProps) {
             <li key={feature.name}>
               <button
                 ref={(el) => (menuRefs.current[index] = el)}
-                className={`menu-item w-full focus:outline-none focus:ring-2 focus:ring-pink-600 ${
-                  currentView === feature.view ? "menu-item-active" : ""
-                }`}
+                className={`menu-item w-full focus:outline-none focus:ring-2 focus:ring-pink-600 text-left py-2 px-4 rounded-lg text-lg font-medium transition duration-300 ${currentView === feature.view
+                    ? "menu-item-active bg-pink-400 text-white font-semibold shadow-md"
+                    : "text-gray-700 hover:bg-pink-300 hover:text-white"
+                  }`} // Áp dụng style active và hover
                 data-view={feature.view}
                 role="menuitem"
                 aria-current={currentView === feature.view ? "page" : undefined}
-                onClick={() => onMenuSelect(feature.view)}
+                onClick={() => handleMenuItemClick(feature.view)}
               >
                 {feature.name}
               </button>
@@ -76,4 +96,4 @@ export default function Sidebar({ currentView, onMenuSelect }: SidebarProps) {
       </nav>
     </div>
   );
-}
+};

@@ -346,22 +346,6 @@ export default function PersonalColor() {
                     performance.now()
                 );
 
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                const videoRatio = video.videoWidth / video.videoHeight;
-                const canvasRatio = canvas.width / canvas.height;
-                let drawWidth = canvas.width;
-                let drawHeight = canvas.height;
-                let offsetX = 0;
-                let offsetY = 0;
-
-                if (videoRatio > canvasRatio) {
-                    drawHeight = canvas.width / videoRatio;
-                    offsetY = (canvas.height - drawHeight) / 2;
-                } else {
-                    drawWidth = canvas.height * videoRatio;
-                    offsetX = (canvas.width - drawWidth) / 2;
-                }
-
                 if (results.faceLandmarks && results.faceLandmarks.length > 0) {
                     const landmarks = results.faceLandmarks[0];
                     const features = analyzeFacialFeatures(landmarks);
@@ -370,69 +354,75 @@ export default function PersonalColor() {
                     // Làm sạch canvas trước khi vẽ
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     if (canvasRef.current && video) {
+                        const videoWidth = 1130;
+
                         const radio = video.videoHeight / video.videoWidth;
+                        video.style.width = videoWidth + "px";
+                        video.style.height = videoWidth * radio + "px";
 
-                        // video.style.width = video.videoWidth + "px";
-                        // video.style.height =
-                        //     video.videoWidth * radio + 200 + "px";
-
-                        canvasRef.current.style.height = `${
-                            video.videoWidth + radio
-                        }px`;
-                        canvasRef.current.style.width = `${video.videoWidth}px`;
-                        canvasRef.current.height = video.videoHeight;
+                        canvasRef.current.style.width = videoWidth + "px";
+                        canvasRef.current.style.transform =
+                            "translateX(-29%) translateY(1px)";
+                        canvasRef.current.style.height =
+                            videoWidth * radio + "px";
                         canvasRef.current.width = video.videoWidth;
+                        canvasRef.current.height = video.videoHeight;
                     }
-                    const drawingUtils = new DrawingUtils(ctx);
-                    for (const landmarks of results.faceLandmarks) {
-                        drawingUtils.drawConnectors(
-                            landmarks,
-                            FaceLandmarker.FACE_LANDMARKS_TESSELATION,
-                            { color: "#C0C0C070", lineWidth: 1 }
-                        );
-                        drawingUtils.drawConnectors(
-                            landmarks,
-                            FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
-                            { color: "#FF3030" }
-                        );
-                        drawingUtils.drawConnectors(
-                            landmarks,
-                            FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW,
-                            { color: "#FF3030" }
-                        );
-                        drawingUtils.drawConnectors(
-                            landmarks,
-                            FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
-                            { color: "#30FF30" }
-                        );
-                        drawingUtils.drawConnectors(
-                            landmarks,
-                            FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,
-                            { color: "#30FF30" }
-                        );
-                        drawingUtils.drawConnectors(
-                            landmarks,
-                            FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,
-                            { color: "#E0E0E0" }
-                        );
-                        drawingUtils.drawConnectors(
-                            landmarks,
-                            FaceLandmarker.FACE_LANDMARKS_LIPS,
-                            { color: "#E0E0E0" }
-                        );
-                        drawingUtils.drawConnectors(
-                            landmarks,
-                            FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
-                            { color: "#FF3030" }
-                        );
-                        drawingUtils.drawConnectors(
-                            landmarks,
-                            FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,
-                            { color: "#30FF30" }
-                        );
-                    }
-                    // applyVirtualMakeup(ctx, landmarks, features);
-                    drawLipMakeup(ctx, landmarks, drawWidth, drawHeight); // Vẽ son môi
+                    // const drawingUtils = new DrawingUtils(ctx);
+                    // for (const landmarks of results.faceLandmarks) {
+                    //     drawingUtils.drawConnectors(
+                    //         landmarks,
+                    //         FaceLandmarker.FACE_LANDMARKS_TESSELATION,
+                    //         { color: "#C0C0C070", lineWidth: 1 }
+                    //     );
+                    //     drawingUtils.drawConnectors(
+                    //         landmarks,
+                    //         FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
+                    //         { color: "#FF3030" }
+                    //     );
+                    //     drawingUtils.drawConnectors(
+                    //         landmarks,
+                    //         FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW,
+                    //         { color: "#FF3030" }
+                    //     );
+                    //     drawingUtils.drawConnectors(
+                    //         landmarks,
+                    //         FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
+                    //         { color: "#30FF30" }
+                    //     );
+                    //     drawingUtils.drawConnectors(
+                    //         landmarks,
+                    //         FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,
+                    //         { color: "#30FF30" }
+                    //     );
+                    //     drawingUtils.drawConnectors(
+                    //         landmarks,
+                    //         FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,
+                    //         { color: "#E0E0E0" }
+                    //     );
+                    //     drawingUtils.drawConnectors(
+                    //         landmarks,
+                    //         FaceLandmarker.FACE_LANDMARKS_LIPS,
+                    //         { color: "#E0E0E0" }
+                    //     );
+                    //     drawingUtils.drawConnectors(
+                    //         landmarks,
+                    //         FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
+                    //         { color: "#FF3030" }
+                    //     );
+                    //     drawingUtils.drawConnectors(
+                    //         landmarks,
+                    //         FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,
+                    //         { color: "#30FF30" }
+                    //     );
+                    // }
+
+                    drawMakeup(
+                        ctx,
+                        landmarks,
+                        video.videoWidth,
+                        video.videoHeight
+                    );
 
                     setMakeupSuggestion(`${suggestion}`);
                 } else {
@@ -457,7 +447,7 @@ export default function PersonalColor() {
         };
     }, [isFaceLandmarkerReady, stream, restartStream]);
 
-    function drawLipMakeup(
+    function drawMakeup(
         ctx: CanvasRenderingContext2D,
         landmarks: NormalizedLandmark[],
         width: number,
@@ -466,9 +456,12 @@ export default function PersonalColor() {
         const outerLip = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291];
         const innerLip = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308];
 
-        // Môi ngoài
+        ctx.save();
+        ctx.filter = "blur(5px)";
+
+        // --- Màu nền môi ---
         ctx.beginPath();
-        ctx.fillStyle = "rgba(255, 0, 120, 0.5)";
+        ctx.fillStyle = "rgba(223, 41, 41, 0.4)"; // hồng cánh sen mềm
         outerLip.forEach((index, i) => {
             const pt = landmarks[index];
             const x = pt.x * width;
@@ -479,7 +472,31 @@ export default function PersonalColor() {
         ctx.closePath();
         ctx.fill();
 
-        // Môi trong (để khoét lỗ, tạo cảm giác môi có độ dày)
+        // --- Gradient hiệu ứng bóng (trong lòng môi) ---
+        const gradient = ctx.createRadialGradient(
+            landmarks[13].x * width, // center môi
+            landmarks[13].y * height,
+            1,
+            landmarks[13].x * width,
+            landmarks[13].y * height,
+            width * 0.05
+        );
+        gradient.addColorStop(0, "rgba(255, 255, 255, 0.2)");
+        gradient.addColorStop(1, "rgba(230, 71, 145, 0)");
+
+        ctx.beginPath();
+        ctx.fillStyle = gradient;
+        outerLip.forEach((index, i) => {
+            const pt = landmarks[index];
+            const x = pt.x * width;
+            const y = pt.y * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fill();
+
+        // --- Khoét phần môi trong để tạo độ dày ---
         ctx.globalCompositeOperation = "destination-out";
         ctx.beginPath();
         innerLip.forEach((index, i) => {
@@ -491,9 +508,146 @@ export default function PersonalColor() {
         });
         ctx.closePath();
         ctx.fill();
-        ctx.globalCompositeOperation = "source-over"; // reset về bình thường
+
+        ctx.globalCompositeOperation = "source-over";
+        ctx.restore();
+
+        // Điểm gần trung tâm gò má
+        const leftCheekPoint = landmarks[50];
+        const rightCheekPoint = landmarks[280];
+
+        // Tọa độ thực
+        const leftX = leftCheekPoint.x * width;
+        const leftY = leftCheekPoint.y * height;
+        const rightX = rightCheekPoint.x * width;
+        const rightY = rightCheekPoint.y * height;
+
+        ctx.save();
+        ctx.filter = "blur(7px)";
+        ctx.fillStyle = "rgba(211, 34, 11, 0.3)"; // Hồng nhạt
+
+        const radius = Math.min(width, height) * 0.018; // Độ lớn má hồng
+
+        // Má trái
+        ctx.beginPath();
+        ctx.arc(leftX, leftY, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Má phải
+        ctx.beginPath();
+        ctx.arc(rightX, rightY, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+
+        const leftEyebrow = [70, 63, 105, 66, 107];
+        const rightEyebrow = [336, 296, 334, 293, 300];
+
+        ctx.save();
+        ctx.filter = "blur(2px)";
+        ctx.fillStyle = "rgba(29, 16, 9, 0.6)"; // màu nâu đậm tự nhiên
+
+        // Lông mày trái
+        ctx.beginPath();
+        leftEyebrow.forEach((index, i) => {
+            const pt = landmarks[index];
+            const x = pt.x * width;
+            const y = pt.y * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fill();
+
+        // Lông mày phải
+        ctx.beginPath();
+        rightEyebrow.forEach((index, i) => {
+            const pt = landmarks[index];
+            const x = pt.x * width;
+            const y = pt.y * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
     }
 
+    // function drawCheekBlushCircle(
+    //     ctx: CanvasRenderingContext2D,
+    //     landmarks: NormalizedLandmark[],
+    //     width: number,
+    //     height: number
+    // ) {
+    //     // Điểm gần trung tâm gò má
+    //     const leftCheekPoint = landmarks[50];
+    //     const rightCheekPoint = landmarks[280];
+
+    //     // Tọa độ thực
+    //     const leftX = leftCheekPoint.x * width;
+    //     const leftY = leftCheekPoint.y * height;
+    //     const rightX = rightCheekPoint.x * width;
+    //     const rightY = rightCheekPoint.y * height;
+
+    //     ctx.save();
+    //     ctx.filter = "blur(7px)";
+    //     ctx.fillStyle = "rgba(211, 34, 11, 0.3)"; // Hồng nhạt
+
+    //     const radius = Math.min(width, height) * 0.018; // Độ lớn má hồng
+
+    //     // Má trái
+    //     ctx.beginPath();
+    //     ctx.arc(leftX, leftY, radius, 0, Math.PI * 2);
+    //     ctx.fill();
+
+    //     // Má phải
+    //     ctx.beginPath();
+    //     ctx.arc(rightX, rightY, radius, 0, Math.PI * 2);
+    //     ctx.fill();
+
+    //     ctx.restore();
+    // }
+
+    // function drawEyebrowMakeup(
+    //     ctx: CanvasRenderingContext2D,
+    //     landmarks: NormalizedLandmark[],
+    //     width: number,
+    //     height: number
+    // ) {
+    //     const leftEyebrow = [70, 63, 105, 66, 107];
+    //     const rightEyebrow = [336, 296, 334, 293, 300];
+
+    //     ctx.save();
+    //     ctx.filter = "blur(2px)";
+    //     ctx.fillStyle = "rgba(29, 16, 9, 0.6)"; // màu nâu đậm tự nhiên
+
+    //     // Lông mày trái
+    //     ctx.beginPath();
+    //     leftEyebrow.forEach((index, i) => {
+    //         const pt = landmarks[index];
+    //         const x = pt.x * width;
+    //         const y = pt.y * height;
+    //         if (i === 0) ctx.moveTo(x, y);
+    //         else ctx.lineTo(x, y);
+    //     });
+    //     ctx.closePath();
+    //     ctx.fill();
+
+    //     // Lông mày phải
+    //     ctx.beginPath();
+    //     rightEyebrow.forEach((index, i) => {
+    //         const pt = landmarks[index];
+    //         const x = pt.x * width;
+    //         const y = pt.y * height;
+    //         if (i === 0) ctx.moveTo(x, y);
+    //         else ctx.lineTo(x, y);
+    //     });
+    //     ctx.closePath();
+    //     ctx.fill();
+
+    //     ctx.restore();
+    // }
     return (
         <AnalysisLayout
             title="Personal Makeup"

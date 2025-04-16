@@ -54,6 +54,7 @@ export default function Sidebar({ currentView, onMenuSelect }: SidebarProps) {
   // Hàm xử lý nhấn menu item
   const handleMenuItemClick = (view: ViewType) => {
     // Luôn cho phép chọn menu item, trừ khi view hiện tại đã là view đang chọn
+    console.log(`[Sidebar]handleMenuItemClick: ${view}`);
     if (currentView !== view) {
       onMenuSelect(view);
     } else {

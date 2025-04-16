@@ -59,13 +59,13 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
   }, []);
 
   const toggleHandDetection = useCallback((enable: boolean) => {
-    console.log("[HandControlProvider] Attempting to toggle hand detection to:", enable);
+    //console.log("[HandControlProvider] Attempting to toggle hand detection to:", enable);
     setIsHandDetectionEnabled((prev: boolean) => {
       if (prev !== enable) {
-        console.log("[HandControlProvider] Toggling hand detection:", enable);
+        //console.log("[HandControlProvider] Toggling hand detection:", enable);
         return enable;
       }
-      console.log("[HandControlProvider] No change in hand detection state, current:", prev);
+      //console.log("[HandControlProvider] No change in hand detection state, current:", prev);
       return prev;
     });
   }, [setIsHandDetectionEnabled]);
@@ -84,11 +84,11 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
    // Tắt hand detection sau 5 giây không phát hiện ngón trỏ
    useEffect(() => {
     const checkInactivity = () => {
-      console.log("[HandControlProvider] Checking inactivity:", {
-        isHandDetectionEnabled,
-        isIndexFingerRaised,
-        elapsed: Date.now() - lastIndexFingerTime.current,
-      });
+      // console.log("[HandControlProvider] Checking inactivity:", {
+      //   isHandDetectionEnabled,
+      //   isIndexFingerRaised,
+      //   elapsed: Date.now() - lastIndexFingerTime.current,
+      // });
       if (isHandDetectionEnabled && !isIndexFingerRaised) {
         const elapsed = Date.now() - lastIndexFingerTime.current;
         if (elapsed >= 5000) {
@@ -154,7 +154,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
           const elementAtPoint = document.elementFromPoint(clickPosition.x, clickPosition.y);
           if (elementAtPoint && elements.current.has(elementAtPoint)) {
             elementAtPoint.dispatchEvent(new Event("click", { bubbles: true }));
-            //console.log("[HandControlProvider] Clicked element:", elementAtPoint);
+            console.log("[HandControlProvider] Clicked element:", elementAtPoint);
           }
           isClickPending.current = false;
         }, 150);
@@ -248,7 +248,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
       {children}
       {isHandDetected && isHandDetectionEnabled && (
         <div
-          className={`absolute w-8 h-8 rounded-full bg-pink-500 border-4 border-white pointer-events-none z-100 transition-all duration-50 ${isLoading ? "opacity-0" : "opacity-100"
+          className={`absolute cursor w-8 h-8 rounded-full bg-pink-500 border-4 border-white pointer-events-none z-100 transition-all duration-50 ${isLoading ? "opacity-0" : "opacity-100"
             }`}
           style={{
             left: `${(cursorPosition.x / window.innerWidth) * 100}%`,

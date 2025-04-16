@@ -63,6 +63,8 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         },
       });
       setStream(mediaStream);
+
+
     } catch (err) {
       console.error("[WebcamProvider] Error accessing webcam:", err);
       setError("Failed to access webcam. Please check your camera permissions.");
@@ -168,7 +170,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Thay đổi tốc độ phát hiện cho gesture và full
     const detectGesture = async () => {
       const now = performance.now();
-      if (now - lastDetectTime.current < 100) {
+      if (now - lastDetectTime.current < 200) { // 5 FPS (1000ms / 5 = 200)
         animationFrameId.current = requestAnimationFrame(detectGesture);
         return;
       }
@@ -198,19 +200,19 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
           setIsIndexFingerRaised(isIndexFingerOnly);
 
-          console.log("[WebcamProvider] Index finger detection details:", {
-            isIndexRaised,
-            indexY: landmarks[8].y,
-            indexBaseY: landmarks[5].y,
-            isIndexFingerOnly,
-          });
+          // console.log("[WebcamProvider] Index finger detection details:", {
+          //   isIndexRaised,
+          //   indexY: landmarks[8].y,
+          //   indexBaseY: landmarks[5].y,
+          //   isIndexFingerOnly,
+          // });
 
           setHandData((prev) => ({
             ...prev,
             isHandDetected: true,
           }));
         } else {
-          console.log("[WebcamProvider] No hand detected, setting isIndexFingerRaised to false");
+          //console.log("[WebcamProvider] No hand detected, setting isIndexFingerRaised to false");
           setIsIndexFingerRaised(false);
           setHandData({
             isHandDetected: false,
@@ -230,7 +232,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const detectFull = async () => {
       const now = performance.now();
-      if (now - lastDetectTime.current < 33) { // 30 FPS (1000ms / 30 = 33ms)
+      if (now - lastDetectTime.current < 66) { // 15 FPS (1000ms / 15 = 16ms)
         animationFrameId.current = requestAnimationFrame(detectFull);
         return;
       }
@@ -262,7 +264,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const clampedX = Math.max(0, Math.min(adjustedX, window.innerWidth - 1));
           const clampedY = Math.max(0, Math.min(adjustedY, window.innerHeight - 1));
 
-          const THRESHOLD = 0.05;
+          const THRESHOLD = 0.1;
           const distanceIndex = Math.sqrt(
             Math.pow(landmarks[8].x - landmarks[5].x, 2) +
             Math.pow(landmarks[8].y - landmarks[5].y, 2)
@@ -283,12 +285,12 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const isIndexFingerOnly = isIndexRaised;
           setIsIndexFingerRaised(isIndexFingerOnly);
 
-          console.log("[WebcamProvider] Index finger detection in detectFull:", {
-            isIndexRaised,
-            indexY: landmarks[8].y,
-            indexBaseY: landmarks[5].y,
-            isIndexFingerOnly,
-          });
+          // console.log("[WebcamProvider] Index finger detection in detectFull:", {
+          //   isIndexRaised,
+          //   indexY: landmarks[8].y,
+          //   indexBaseY: landmarks[5].y,
+          //   isIndexFingerOnly,
+          // });
 
           let currentPosition: { x: number; y: number };
           if (isFist) {
@@ -344,7 +346,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             });
           }
         } else {
-          console.log("[WebcamProvider] No hand detected in detectFull, resetting handData");
+          //console.log("[WebcamProvider] No hand detected in detectFull, resetting handData");
           setIsIndexFingerRaised(false); // Đặt lại isIndexFingerRaised khi không phát hiện tay
           const newHandData = {
             isHandDetected: false,
@@ -379,10 +381,10 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     if (isHandDetectionEnabled) {
-      console.log("[WebcamProvider] Switching to detectFull mode");
+      //console.log("[WebcamProvider] Switching to detectFull mode");
       detectFull();
     } else {
-      console.log("[WebcamProvider] Switching to detectGesture mode");
+      //console.log("[WebcamProvider] Switching to detectGesture mode");
       detectGesture();
     }
 

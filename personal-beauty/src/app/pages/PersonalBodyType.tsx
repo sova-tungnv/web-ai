@@ -20,12 +20,12 @@ const SelectionButton: React.FC<{
     if (!button) return;
 
     if (isHandDetectionEnabled && !isRegistered.current) {
-      console.log("[SelectionButton] Registering button:", button.dataset.option);
+      //console.log("[SelectionButton] Registering button:", button.dataset.option);
       button.classList.add("hoverable");
       registerElement(button);
       isRegistered.current = true;
     } else if (!isHandDetectionEnabled && isRegistered.current) {
-      console.log("[SelectionButton] Unregistering button:", button.dataset.option);
+      //console.log("[SelectionButton] Unregistering button:", button.dataset.option);
       button.classList.remove("hoverable");
       unregisterElement(button);
       isRegistered.current = false;
@@ -33,7 +33,7 @@ const SelectionButton: React.FC<{
 
     return () => {
       if (isRegistered.current) {
-        console.log("[SelectionButton] Cleanup - Unregistering button:", button.dataset.option);
+        //console.log("[SelectionButton] Cleanup - Unregistering button:", button.dataset.option);
         button.classList.remove("hoverable");
         unregisterElement(button);
         isRegistered.current = false;

@@ -19,7 +19,7 @@ export default function LoadingOverlay({ isLoading }: LoadingOverlayProps) {
         {/* Spinner lớn hơn cho TV */}
         <div className="w-24 h-24 border-6 border-t-6 border-t-pink-500 border-gray-300 rounded-full animate-spin"></div>
         {/* Font chữ lớn và rõ ràng */}
-        <p className="mt-6 text-2xl font-semibold text-gray-800">Loading...</p>
+        <p className="mt-6 text-2xl font-semibold text-pink-800">Loading...</p>
       </div>
     </div>
   );

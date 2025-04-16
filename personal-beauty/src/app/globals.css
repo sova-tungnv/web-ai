@@ -37,6 +37,9 @@ body {
 * {
   box-sizing: border-box;
 }
+.cursor {
+  transition: transform 0.1s ease-out;
+}
 
 .menu-item {
   text-align: center;
@@ -53,4 +56,11 @@ body {
   background-color: #db2777; /* bg-pink-600 */
   transform: scale(1.1); /* scale-110 */
   border: 4px solid #be185d; /* border-4 border-pink-800 */
+}
+
+.area-button.hover {
+  background-color: #F9A8D4; /* Màu hồng nhạt (tương đương Tailwind bg-pink-300) */
+  color: white; /* Chữ trắng */
+  transform: scale(1.05); /* Phóng to nhẹ */
+  transition: all 0.3s ease; /* Hiệu ứng chuyển đổi mượt mà */
 }

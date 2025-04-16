@@ -2,7 +2,8 @@
 
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import AnalysisLayout from "../components/AnalysisLayout";
 import { useWebcam } from "../context/WebcamContext";
@@ -10,55 +11,53 @@ import { useLoading } from "../context/LoadingContext";
 import { useHandControl } from "../context/HandControlContext";
 
 // Component con để quản lý từng nút
-const SelectionButton: React.FC<{
-    area: string;
-    selectedArea: string | null;
-    setSelectedArea: (area: string) => void;
-}> = ({ area, selectedArea, setSelectedArea }) => {
-    const { registerElement, unregisterElement, isHandDetectionEnabled } = useHandControl();
-    const buttonRef = useRef<HTMLButtonElement>(null);
-    const isRegistered = useRef(false);
+const SelectionButton = React.memo(
+    ({ area, selectedArea, setSelectedArea }: { area: string; selectedArea: string | null; setSelectedArea: (area: string) => void }) => {
+        const { registerElement, unregisterElement, isHandDetectionEnabled } = useHandControl();
+        const buttonRef = useRef<HTMLButtonElement>(null);
+        const isRegistered = useRef(false);
 
-    useEffect(() => {
-        const button = buttonRef.current;
-        if (!button) return;
+        useEffect(() => {
+            const button = buttonRef.current;
+            if (!button) return;
 
-        if (isHandDetectionEnabled && !isRegistered.current) {
-            console.log("[SelectionButton] Registering button:", button.dataset.area);
-            button.classList.add("hoverable");
-            registerElement(button);
-            isRegistered.current = true;
-        } else if (!isHandDetectionEnabled && isRegistered.current) {
-            console.log("[SelectionButton] Unregistering button:", button.dataset.area);
-            button.classList.remove("hoverable");
-            unregisterElement(button);
-            isRegistered.current = false;
-        }
-
-        return () => {
-            if (isRegistered.current && button) {
-                console.log("[SelectionButton] Cleanup - Unregistering button:", button.dataset.area);
+            if (isHandDetectionEnabled && !isRegistered.current) {
+                //console.log("[SelectionButton] Registering button:", button.dataset.area);
+                button.classList.add("hoverable");
+                registerElement(button);
+                isRegistered.current = true;
+            } else if (!isHandDetectionEnabled && isRegistered.current) {
+                //console.log("[SelectionButton] Unregistering button:", button.dataset.area);
                 button.classList.remove("hoverable");
                 unregisterElement(button);
                 isRegistered.current = false;
             }
-        };
-    }, [registerElement, unregisterElement, isHandDetectionEnabled]);
 
-    return (
-        <button
-            ref={buttonRef}
-            className={`area-button text-2xl font-semibold px-8 py-4 rounded-xl transition-all duration-300 transform shadow-lg ${selectedArea === area
-                ? "bg-pink-600 text-white scale-105 border-4 border-pink-300"
-                : "bg-gray-200 text-gray-800 hover:bg-gray-300 hover:scale-105"
-                }`}
-            data-area={area}
-            onClick={() => setSelectedArea(area)}
-        >
-            {area.charAt(0).toUpperCase() + area.slice(1)}
-        </button>
-    );
-};
+            return () => {
+                if (isRegistered.current && button) {
+                    //console.log("[SelectionButton] Cleanup - Unregistering button:", button.dataset.area);
+                    button.classList.remove("hoverable");
+                    unregisterElement(button);
+                    isRegistered.current = false;
+                }
+            };
+        }, [registerElement, unregisterElement, isHandDetectionEnabled]);
+
+        return (
+            <button
+                ref={buttonRef}
+                className={`area-button text-2xl font-semibold px-8 py-4 rounded-xl transition-all duration-300 transform shadow-lg ${selectedArea === area
+                    ? "bg-pink-600 text-white scale-105 border-4 border-pink-300"
+                    : "bg-gray-200 text-gray-800 hover:bg-gray-300 hover:scale-105"
+                    }`}
+                data-area={area}
+                onClick={() => setSelectedArea(area)}
+            >
+                {area.charAt(0).toUpperCase() + area.slice(1)}
+            </button>
+        );
+    }
+);
 
 export default function PersonalColor() {
     const { stream, error: webcamError, restartStream, handData, setIsHandDetectionEnabled, isIndexFingerRaised } = useWebcam();
@@ -138,9 +137,11 @@ export default function PersonalColor() {
     useEffect(() => {
         if (stream && displayVideoRef.current) {
             displayVideoRef.current.srcObject = stream;
-            displayVideoRef.current.play().catch((err) => {
-                console.error("[PersonalColor] Error playing video:", err);
-            });
+            displayVideoRef.current.onloadedmetadata = () => {
+                displayVideoRef.current!.play().catch((err) => {
+                    console.error("[PersonalColor] Error playing video:", err);
+                });
+            };
 
             const checkVideoReady = () => {
                 if (displayVideoRef.current && displayVideoRef.current.readyState >= 4) {
@@ -156,26 +157,26 @@ export default function PersonalColor() {
         }
     }, [stream, setIsLoading]);
 
-    useEffect(() => {
-        console.log("[PersonalColor] Hand data updated:", {
-            isHandDetected: handData.isHandDetected,
-            isHandDetectionEnabled,
-            isIndexFingerRaised,
-        });
-        if (isHandDetectionEnabled && handData.isHandDetected) {
-            console.log("[PersonalColor] Hand activity detected");
-        }
-    }, [isHandDetectionEnabled, handData.isHandDetected, handData.cursorPosition, isIndexFingerRaised]);
+    // useEffect(() => {
+    //     console.log("[PersonalColor] Hand data updated:", {
+    //         isHandDetected: handData.isHandDetected,
+    //         isHandDetectionEnabled,
+    //         isIndexFingerRaised,
+    //     });
+    //     if (isHandDetectionEnabled && handData.isHandDetected) {
+    //         console.log("[PersonalColor] Hand activity detected");
+    //     }
+    // }, [isHandDetectionEnabled, handData.isHandDetected, handData.cursorPosition, isIndexFingerRaised]);
 
     useEffect(() => {
-        if (!isFaceLandmarkerReady || !stream || !canvasRef.current || !displayVideoRef.current || isHandDetectionEnabled) {
-            // console.log(
-            //     "[PersonalColor] Waiting for FaceLandmarker or webcam...",
-            //     isFaceLandmarkerReady,
-            //     stream,
-            //     canvasRef.current,
-            //     displayVideoRef.current
-            // );
+        if (!isFaceLandmarkerReady || !stream || !canvasRef.current || !displayVideoRef.current) {
+            console.log(
+                "[PersonalColor] Waiting for FaceLandmarker or webcam...",
+                isFaceLandmarkerReady,
+                stream,
+                canvasRef.current,
+                displayVideoRef.current
+            );
             return;
         }
 
@@ -258,7 +259,7 @@ export default function PersonalColor() {
                 cancelAnimationFrame(animationFrameId.current);
             }
         };
-    }, [isFaceLandmarkerReady, stream, restartStream, isHandDetectionEnabled]);
+    }, [isFaceLandmarkerReady, !!stream, restartStream]);
 
     const analyzeColorTone = (imageData: ImageData): string => {
         const data = imageData.data;
@@ -300,49 +301,58 @@ export default function PersonalColor() {
         return "Neutral";
     };
 
-    const selectionButtons = (
-        <div className="flex flex-col gap-6">
-            {areas.map((area) => (
-                <SelectionButton key={area} area={area} selectedArea={selectedArea} setSelectedArea={setSelectedArea} />
-            ))}
-        </div>
+    const selectionButtons = useMemo(
+        () => (
+            <div className="flex flex-col gap-6">
+                {areas.map((area) => (
+                    <SelectionButton key={area} area={area} selectedArea={selectedArea} setSelectedArea={setSelectedArea} />
+                ))}
+            </div>
+        ),
+        [selectedArea, setSelectedArea]
     );
 
     const palette = colorTone ? colorPalette[colorTone.toLowerCase() as keyof typeof colorPalette] : [];
-    const colorPaletteElement = (
-        <div className="flex flex-col gap-3">
-            {palette.map((item, index) => (
-                <div key={index} className="flex items-center gap-3">
-                    <button
-                        className="color-button w-10 h-10 rounded-full border-2 border-gray-300"
-                        style={{ backgroundColor: item.color }}
-                        data-color={item.color}
-                        onClick={() => setSelectedColor(item.color)}
-                    />
-                    <span className="text-base font-medium text-gray-700">{item.label}</span>
-                </div>
-            ))}
-        </div>
+    const colorPaletteElement = useMemo(
+        () => (
+            <div className="flex flex-col gap-3">
+                {palette.map((item, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                        <button
+                            className="color-button w-10 h-10 rounded-full border-2 border-gray-300"
+                            style={{ backgroundColor: item.color }}
+                            data-color={item.color}
+                            onClick={() => setSelectedColor(item.color)}
+                        />
+                        <span className="text-base font-medium text-gray-700">{item.label}</span>
+                    </div>
+                ))}
+            </div>
+        ),
+        [palette, setSelectedColor]
     );
 
-    const actionButtons = (
-        <>
-            <button
-                className="bg-pink-500 text-white px-12 py-6 rounded-lg text-3xl hover:bg-pink-600 transition"
-                onClick={() => {
-                    const canvas = canvasRef.current;
-                    if (canvas) {
-                        const dataUrl = canvas.toDataURL("image/png");
-                        const link = document.createElement("a");
-                        link.href = dataUrl;
-                        link.download = "personal-color-result.png";
-                        link.click();
-                    }
-                }}
-            >
-                Capture
-            </button>
-        </>
+    const actionButtons = useMemo(
+        () => (
+            <>
+                <button
+                    className="bg-pink-500 text-white px-12 py-6 rounded-lg text-3xl hover:bg-pink-600 transition"
+                    onClick={() => {
+                        const canvas = canvasRef.current;
+                        if (canvas) {
+                            const dataUrl = canvas.toDataURL("image/png");
+                            const link = document.createElement("a");
+                            link.href = dataUrl;
+                            link.download = "personal-color-result.png";
+                            link.click();
+                        }
+                    }}
+                >
+                    Capture
+                </button>
+            </>
+        ),
+        []
     );
 
     return (

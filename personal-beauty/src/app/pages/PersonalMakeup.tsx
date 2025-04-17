@@ -28,13 +28,7 @@ type FacialFeatures = {
 };
 
 export default function PersonalColor() {
-    const {
-        stream,
-        error: webcamError,
-        restartStream,
-        handData,
-        setIsHandDetectionEnabled,
-    } = useWebcam();
+    const { stream, error: webcamError, restartStream } = useWebcam();
     const { setIsLoading } = useLoading(); // Sử dụng context
     const { registerElement, unregisterElement } = useHandControl();
     const [error, setError] = useState<string | null>(null);
@@ -48,6 +42,7 @@ export default function PersonalColor() {
     const displayVideoRef = useRef<HTMLVideoElement>(null);
     const animationFrameId = useRef<number | null>(null);
     const [makeupSuggestion, setMakeupSuggestion] = useState<any | null>(null);
+    const [isApplyMakeup, setIsApplyMakeup] = useState(false);
 
     useEffect(() => {
         const initializeFaceLandmarker = async () => {
@@ -109,8 +104,6 @@ export default function PersonalColor() {
         const forehead = landmarks[10];
         const noseLeft = landmarks[98];
         const noseRight = landmarks[327];
-        const upperLip = landmarks[13];
-        const lowerLip = landmarks[14];
         const browLeft = landmarks[65];
         const browRight = landmarks[295];
         const cheekLeft = landmarks[50];
@@ -353,21 +346,25 @@ export default function PersonalColor() {
 
                     // Làm sạch canvas trước khi vẽ
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    if (canvasRef.current && video) {
-                        const videoWidth = 1130;
 
-                        const radio = video.videoHeight / video.videoWidth;
-                        video.style.width = videoWidth + "px";
-                        video.style.height = videoWidth * radio + "px";
-
-                        canvasRef.current.style.width = videoWidth + "px";
-                        canvasRef.current.style.transform =
-                            "translateX(-29%) translateY(1px)";
-                        canvasRef.current.style.height =
-                            videoWidth * radio + "px";
-                        canvasRef.current.width = video.videoWidth;
-                        canvasRef.current.height = video.videoHeight;
+                    const videoAspect = video.videoWidth / video.videoHeight;
+                    const canvasAspect = canvas.width / canvas.height;
+    
+                    let drawWidth, drawHeight, offsetX, offsetY;
+    
+                    if (videoAspect > canvasAspect) {
+                        drawWidth = canvas.width;
+                        drawHeight = canvas.width / videoAspect;
+                        offsetX = 0;
+                        offsetY = (canvas.height - drawHeight) / 2;
+                    } else {
+                        drawHeight = canvas.height;
+                        drawWidth = canvas.height * videoAspect;
+                        offsetY = 0;
+                        offsetX = (canvas.width - drawWidth) / 2;
                     }
+    
+                    ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
                     // const drawingUtils = new DrawingUtils(ctx);
                     // for (const landmarks of results.faceLandmarks) {
                     //     drawingUtils.drawConnectors(
@@ -417,12 +414,19 @@ export default function PersonalColor() {
                     //     );
                     // }
 
-                    drawMakeup(
-                        ctx,
-                        landmarks,
-                        video.videoWidth,
-                        video.videoHeight
-                    );
+                    detectBlinkWithinTime(landmarks);
+
+                    console.log(isApplyMakeup);
+
+                    if (isApplyMakeup)
+                        drawMakeup(
+                            ctx,
+                            landmarks,
+                            video.videoWidth,
+                            video.videoHeight
+                        );
+
+                    setStatusMessage("ok");
 
                     setMakeupSuggestion(`${suggestion}`);
                 } else {
@@ -540,13 +544,13 @@ export default function PersonalColor() {
 
         ctx.restore();
 
+        //============ Vẽ lông mày
         const leftEyebrow = [70, 63, 105, 66, 107];
         const rightEyebrow = [336, 296, 334, 293, 300];
 
         ctx.save();
-        ctx.filter = "blur(2px)";
-        ctx.fillStyle = "rgba(29, 16, 9, 0.6)"; // màu nâu đậm tự nhiên
-
+        ctx.filter = "blur(3px)";
+        ctx.fillStyle = "rgba(54, 24, 15, 0.64)"; // màu nâu đậm tự nhiên
         // Lông mày trái
         ctx.beginPath();
         leftEyebrow.forEach((index, i) => {
@@ -558,7 +562,6 @@ export default function PersonalColor() {
         });
         ctx.closePath();
         ctx.fill();
-
         // Lông mày phải
         ctx.beginPath();
         rightEyebrow.forEach((index, i) => {
@@ -570,84 +573,146 @@ export default function PersonalColor() {
         });
         ctx.closePath();
         ctx.fill();
+        ctx.restore();
 
+        // =============Sống mũi và vùng highlight
+        const noseBridge = [6, 197, 195, 5, 4]; // giữa mũi đến đầu mũi
+        const noseContourLeft = [98, 327, 326]; // viền trái sống mũi
+        const noseContourRight = [327, 326, 98].map((i) => 454 - i); // phản chiếu viền phải (thủ công nếu cần)
+        // Highlight sống mũi
+        ctx.save();
+        ctx.filter = "blur(5px)";
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.2)"; // highlight trắng nhẹ
+        noseBridge.forEach((index, i) => {
+            const pt = landmarks[index];
+            const x = pt.x * width;
+            const y = pt.y * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.restore();
+        // Shadow 2 bên cánh mũi (contour)
+        const drawSideShadow = (points: number[]) => {
+            ctx.save();
+            ctx.filter = "blur(4px)";
+            ctx.beginPath();
+            ctx.fillStyle = "rgba(80, 40, 40, 0.15)"; // shadow nâu nhẹ
+            points.forEach((index, i) => {
+                const pt = landmarks[index];
+                const x = pt.x * width;
+                const y = pt.y * height;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        };
+
+        drawSideShadow(noseContourLeft);
+        drawSideShadow(noseContourRight);
+
+        // ==============Vẽ eyeliner
+        const leftEyeliner = [33, 7, 163, 144, 145, 153, 154, 155]; // mí dưới trái
+        const rightEyeliner = [263, 249, 390, 373, 374, 380, 381, 382]; // mí dưới phải
+
+        const drawEyeliner = (indices: number[], color: string) => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            // ctx.filter = "blur(1px)";
+            ctx.lineWidth = 1;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+
+            indices.forEach((index, i) => {
+                const pt = landmarks[index];
+                const x = pt.x * width;
+                const y = pt.y * height;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+
+            ctx.stroke();
+            ctx.restore();
+        };
+
+        // Eyeliner – đen mảnh
+        drawEyeliner(leftEyeliner, "rgba(30, 30, 30, 0.9)");
+        drawEyeliner(rightEyeliner, "rgba(30, 30, 30, 0.9)");
+
+
+        // Da trắng sáng
+        const faceOutline = [
+            10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365,
+            379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93,
+            234, 127, 162, 21, 54,
+        ];
+
+        ctx.save();
+        ctx.beginPath();
+        faceOutline.forEach((index, i) => {
+            const pt = landmarks[index];
+            const x = pt.x * width;
+            const y = pt.y * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+
+        // Tô màu trắng nhẹ + blur
+        ctx.filter = "blur(6px)";
+        ctx.fillStyle = "rgba(197, 175, 163, 0.15)";
+        ctx.fill();
         ctx.restore();
     }
 
-    // function drawCheekBlushCircle(
-    //     ctx: CanvasRenderingContext2D,
-    //     landmarks: NormalizedLandmark[],
-    //     width: number,
-    //     height: number
-    // ) {
-    //     // Điểm gần trung tâm gò má
-    //     const leftCheekPoint = landmarks[50];
-    //     const rightCheekPoint = landmarks[280];
+    let blinkTimestamps: number[] = [];
+    let isEyeClosed = false;
 
-    //     // Tọa độ thực
-    //     const leftX = leftCheekPoint.x * width;
-    //     const leftY = leftCheekPoint.y * height;
-    //     const rightX = rightCheekPoint.x * width;
-    //     const rightY = rightCheekPoint.y * height;
+    function getEAR(
+        top: NormalizedLandmark,
+        bottom: NormalizedLandmark
+    ): number {
+        const dy = top.y - bottom.y;
+        const dx = top.x - bottom.x;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
 
-    //     ctx.save();
-    //     ctx.filter = "blur(7px)";
-    //     ctx.fillStyle = "rgba(211, 34, 11, 0.3)"; // Hồng nhạt
+    function detectBlinkWithinTime(landmarks: NormalizedLandmark[]) {
+        const top = landmarks[159]; // mí trên trái
+        const bottom = landmarks[145]; // mí dưới trái
 
-    //     const radius = Math.min(width, height) * 0.018; // Độ lớn má hồng
+        const ear = getEAR(top, bottom);
+        const threshold = 0.015;
+        const currentTime = Date.now();
 
-    //     // Má trái
-    //     ctx.beginPath();
-    //     ctx.arc(leftX, leftY, radius, 0, Math.PI * 2);
-    //     ctx.fill();
+        if (ear < threshold && !isEyeClosed) {
+            isEyeClosed = true;
+        }
 
-    //     // Má phải
-    //     ctx.beginPath();
-    //     ctx.arc(rightX, rightY, radius, 0, Math.PI * 2);
-    //     ctx.fill();
+        if (ear >= threshold && isEyeClosed) {
+            isEyeClosed = false;
+            blinkTimestamps.push(currentTime);
 
-    //     ctx.restore();
-    // }
+            // Lọc các nháy mắt trong 5 giây gần nhất
+            const recentBlinks = blinkTimestamps.filter(
+                (t) => currentTime - t <= 5000
+            );
 
-    // function drawEyebrowMakeup(
-    //     ctx: CanvasRenderingContext2D,
-    //     landmarks: NormalizedLandmark[],
-    //     width: number,
-    //     height: number
-    // ) {
-    //     const leftEyebrow = [70, 63, 105, 66, 107];
-    //     const rightEyebrow = [336, 296, 334, 293, 300];
+            console.log(recentBlinks);
+            if (recentBlinks.length >= 1) {
+                console.log("✅ Nháy mắt 3 lần trong 5 giây!");
+                blinkTimestamps = []; // reset nếu muốn
+                setIsApplyMakeup(!isApplyMakeup);
+            } else {
+                blinkTimestamps = recentBlinks; // giữ lại các nháy hợp lệ
+            }
+        }
+    }
 
-    //     ctx.save();
-    //     ctx.filter = "blur(2px)";
-    //     ctx.fillStyle = "rgba(29, 16, 9, 0.6)"; // màu nâu đậm tự nhiên
-
-    //     // Lông mày trái
-    //     ctx.beginPath();
-    //     leftEyebrow.forEach((index, i) => {
-    //         const pt = landmarks[index];
-    //         const x = pt.x * width;
-    //         const y = pt.y * height;
-    //         if (i === 0) ctx.moveTo(x, y);
-    //         else ctx.lineTo(x, y);
-    //     });
-    //     ctx.closePath();
-    //     ctx.fill();
-
-    //     // Lông mày phải
-    //     ctx.beginPath();
-    //     rightEyebrow.forEach((index, i) => {
-    //         const pt = landmarks[index];
-    //         const x = pt.x * width;
-    //         const y = pt.y * height;
-    //         if (i === 0) ctx.moveTo(x, y);
-    //         else ctx.lineTo(x, y);
-    //     });
-    //     ctx.closePath();
-    //     ctx.fill();
-
-    //     ctx.restore();
-    // }
     return (
         <AnalysisLayout
             title="Personal Makeup"

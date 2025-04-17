@@ -13,7 +13,7 @@ const modelConfigs: { [key: string]: any } = {
       },
       runningMode: "VIDEO",
       numHands: 1,
-      minHandDetectionConfidence: 0.2, // Giảm xuống 0.2 để tăng độ nhạy
+      //minHandDetectionConfidence: 0.2, // Giảm xuống 0.2 để tăng độ nhạy
     },
   },
   face: {

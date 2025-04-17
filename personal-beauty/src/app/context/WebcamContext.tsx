@@ -40,16 +40,13 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [currentView, setCurrentView] = useState<string>(VIEWS.HOME);
   const videoRef = useRef<HTMLVideoElement>(null);
   const workerRef = useRef<Worker | null>(null);
-  const handLandmarkerRef = useRef<HandLandmarker | null>(null);
-  const [isHandLandmarkerReady, setIsHandLandmarkerReady] = useState(false);
   const animationFrameId = useRef<number | null>(null);
   const lightweightFrameId = useRef<number | null>(null);
   const lastDetectTime = useRef(0);
-  const lastUpdateTime = useRef(0);
   const lastLightweightDetectTime = useRef(0);
-  const positionHistory = useRef<{ x: number; y: number }[]>([]);
-  const HISTORY_SIZE = 5;
   const lastPositionBeforeFist = useRef<{ x: number; y: number } | null>(null);
+  const smoothPosition = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const ALPHA = 0.3;
   const [handData, setHandData] = useState<HandData>({
     isHandDetected: false,
     cursorPosition: { x: 0, y: 0 },
@@ -118,26 +115,22 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       let currentPosition: { x: number; y: number };
       if (isFist) {
         if (!lastPositionBeforeFist.current) {
-          lastPositionBeforeFist.current = positionHistory.current.length
-            ? positionHistory.current[positionHistory.current.length - 1]
-            : { x: clampedX, y: clampedY };
+          lastPositionBeforeFist.current = smoothPosition.current;
         }
         currentPosition = lastPositionBeforeFist.current;
       } else {
-        positionHistory.current.push({ x: clampedX, y: clampedY });
-        if (positionHistory.current.length > HISTORY_SIZE) {
-          positionHistory.current.shift();
+        // Khởi tạo smoothPosition với giá trị ban đầu
+        if (smoothPosition.current.x === 0 && smoothPosition.current.y === 0) {
+          smoothPosition.current = { x: clampedX, y: clampedY };
         }
-        const avgPosition = positionHistory.current.reduce(
-          (acc, pos) => ({
-            x: acc.x + pos.x / positionHistory.current.length,
-            y: acc.y + pos.y / positionHistory.current.length,
-          }),
-          { x: 0, y: 0 }
-        );
+
+        // Áp dụng EMA để làm mượt
+        smoothPosition.current.x = ALPHA * clampedX + (1 - ALPHA) * smoothPosition.current.x;
+        smoothPosition.current.y = ALPHA * clampedY + (1 - ALPHA) * smoothPosition.current.y;
+
         currentPosition = {
-          x: Math.round(avgPosition.x * 100) / 100,
-          y: Math.round(avgPosition.y * 100) / 100,
+          x: Math.round(smoothPosition.current.x * 100) / 100,
+          y: Math.round(smoothPosition.current.y * 100) / 100,
         };
         lastPositionBeforeFist.current = null;
       }
@@ -195,55 +188,6 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [stream]);
 
-  // useEffect(() => {
-  //   if (stream && videoRef.current) {
-  //     videoRef.current.srcObject = stream;
-  //     videoRef.current.play().catch((err) => {
-  //       console.error("[WebcamProvider] Error playing video:", err);
-  //     });
-  //     console.log("[WebcamProvider] Stream assigned to videoRef.current, stream active:", stream.active);
-  //   }
-  // }, [stream, videoRef.current]);
-
-  // useEffect(() => {
-  //   const initializeHandLandmarker = async () => {
-  //     try {
-  //       const filesetResolver = await FilesetResolver.forVisionTasks(
-  //         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
-  //       );
-  //       const handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
-  //         baseOptions: {
-  //           modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-  //           delegate: "GPU",
-  //         },
-  //         runningMode: "VIDEO",
-  //         numHands: 1,
-  //       });
-
-  //       handLandmarkerRef.current = handLandmarker;
-  //       setIsHandLandmarkerReady(true);
-  //       console.log("[WebcamProvider] HandLandmarker initialized");
-  //     } catch (err) {
-  //       console.error("[WebcamProvider] Error initializing HandLandmarker:", err);
-  //       setError("Failed to initialize hand detection. Please refresh the page.");
-  //       setIsHandLandmarkerReady(false);
-  //     }
-  //   };
-
-  //   initializeHandLandmarker();
-
-  //   return () => {
-  //     if (handLandmarkerRef.current) {
-  //       handLandmarkerRef.current.close();
-  //       handLandmarkerRef.current = null;
-  //     }
-  //     setIsHandLandmarkerReady(false);
-  //     if (animationFrameId.current) {
-  //       cancelAnimationFrame(animationFrameId.current);
-  //     }
-  //   };
-  // }, []);
-
   useEffect(() => {
     workerRef.current = new Worker(new URL("./VisionWorker.ts", import.meta.url));
 
@@ -282,7 +226,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
 
           if (isHandDetectionEnabled) {
-            //console.log("[WebcamProvider] Processing detectFull");
+            console.log("[WebcamProvider] Processing detectFull");
             const { isHandDetected, cursorPosition, isFist, isOpenHand, isIndexRaised: updatedIndexRaised } = detectFull(landmarks);
             setIsIndexFingerRaised(updatedIndexRaised);
             setHandData({
@@ -377,8 +321,8 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const video = videoRef.current;
     const canvas = document.createElement("canvas");
-    canvas.width = 320;
-    canvas.height = 240;
+    canvas.width = 640;
+    canvas.height = 480;
     const ctx = canvas.getContext("2d");
 
     const detect = () => {

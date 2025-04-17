@@ -54,22 +54,19 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
 
   const registerElement = useCallback((element: Element) => {
     elements.current.add(element);
-    console.log("[HandControlProvider] Registered element:", element, "Total elements:", elements.current.size);
+    //console.log("[HandControlProvider] Registered element:", element, "Total elements:", elements.current.size);
   }, []);
 
   const unregisterElement = useCallback((element: Element) => {
     elements.current.delete(element);
-    console.log("[HandControlProvider] Unregistered element:", element, "Total elements:", elements.current.size);
+    //console.log("[HandControlProvider] Unregistered element:", element, "Total elements:", elements.current.size);
   }, []);
 
   const toggleHandDetection = useCallback((enable: boolean) => {
-    console.log("[HandControlProvider] Attempting to toggle hand detection to:", enable);
     setIsHandDetectionEnabled((prev: boolean) => {
       if (prev !== enable) {
-        console.log("[HandControlProvider] Toggling hand detection:", enable);
         return enable;
-      }
-      console.log("[HandControlProvider] No change in hand detection state, current:", prev);
+      }    
       return prev;
     });
   }, [setIsHandDetectionEnabled]);
@@ -103,7 +100,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
       lastProcessedPosition.current = { x: position.x, y: position.y };
 
       const elementsAtPoint = document.elementsFromPoint(position.x, position.y);
-      console.log("[HandControlProvider] Elements at point:", elementsAtPoint);
+      //console.log("[HandControlProvider] Elements at point:", elementsAtPoint);
 
       const targetElement = elementsAtPoint.find((el) => elements.current.has(el));
 
@@ -113,7 +110,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
 
       if (targetElement) {
         targetElement.classList.add("hover");
-        console.log("[HandControlProvider] Added hover to:", targetElement);
+        //console.log("[HandControlProvider] Added hover to:", targetElement);
       }
     },
     [isHandDetectionEnabled]
@@ -145,9 +142,9 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
 
         fistDebounceTimeout.current = setTimeout(() => {
           const elementsAtPoint = document.elementsFromPoint(clickPosition.x, clickPosition.y);
-          console.log("[HandControlProvider] Elements at click position:", elementsAtPoint);
+          //console.log("[HandControlProvider] Elements at click position:", elementsAtPoint);
           const elementAtPoint = elementsAtPoint.find((el) => elements.current.has(el));
-          console.log("[HandControlProvider] Element at click position (registered):", elementAtPoint);
+          //console.log("[HandControlProvider] Element at click position (registered):", elementAtPoint);
           if (elementAtPoint) {
             const clickEvent = new Event("click", { bubbles: true, cancelable: true });
             elementAtPoint.dispatchEvent(clickEvent);

@@ -1,5 +1,3 @@
-// src/app/context/HandControlContext.tsx
-
 "use client";
 
 import React, { createContext, useContext, useCallback, useRef, useEffect, useState } from "react";
@@ -11,8 +9,7 @@ interface HandControlContextType {
   registerElement: (element: Element) => void;
   unregisterElement: (element: Element) => void;
   isHandDetectionEnabled: boolean;
-  toggleHandDetection: () => void;
-  indexFingerProgress: number;
+  toggleHandDetection: (enable: boolean) => void;
 }
 
 const HandControlContext = createContext<HandControlContextType | undefined>(undefined);
@@ -20,7 +17,7 @@ const HandControlContext = createContext<HandControlContextType | undefined>(und
 export const useHandControl = () => {
   const context = useContext(HandControlContext);
   if (!context) {
-    throw new Error("useHandControl must be used within a HandControlProvider");
+    throw new Error("useHandControl phải được sử dụng trong HandControlProvider");
   }
   return context;
 };
@@ -33,7 +30,7 @@ interface HandControlProviderProps {
 }
 
 export const HandControlProvider: React.FC<HandControlProviderProps> = ({ children, handData, onOpenHand, isLoading }) => {
-  const { isIndexFingerRaised, isHandDetectionEnabled, setIsHandDetectionEnabled } = useWebcam(); // Lấy trực tiếp từ WebcamContext
+  const { isIndexFingerRaised, isHandDetectionEnabled, setIsHandDetectionEnabled } = useWebcam();
   const fistDebounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const isClickPending = useRef(false);
   const lastFistState = useRef(false);
@@ -43,34 +40,40 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
   const elements = useRef<Set<Element>>(new Set());
   const animationFrameId = useRef<number | null>(null);
   const lastDetectTime = useRef<number>(0);
-  const lastIndexFingerTime = useRef<number>(Date.now()); // Theo dõi thời gian cuối cùng phát hiện ngón trỏ
-  
+  const lastIndexFingerTime = useRef<number>(Date.now());
+  const lastHandData = useRef(handData);
+  const lastHandDetectedTime = useRef<number>(Date.now());
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isHandDetected, setIsHandDetected] = useState(false);
 
+  // Sử dụng useRef để lưu handData, tránh đưa handData vào dependencies của useEffect
+  const handDataRef = useRef(handData);
+  useEffect(() => {
+    handDataRef.current = handData;
+  }, [handData]);
+
   const registerElement = useCallback((element: Element) => {
     elements.current.add(element);
-    //console.log("[HandControlProvider] Registered element:", element, "Total elements:", elements.current.size);
+    console.log("[HandControlProvider] Registered element:", element, "Total elements:", elements.current.size);
   }, []);
 
   const unregisterElement = useCallback((element: Element) => {
     elements.current.delete(element);
-    //console.log("[HandControlProvider] Unregistered element:", element, "Total elements:", elements.current.size);
+    console.log("[HandControlProvider] Unregistered element:", element, "Total elements:", elements.current.size);
   }, []);
 
   const toggleHandDetection = useCallback((enable: boolean) => {
-    //console.log("[HandControlProvider] Attempting to toggle hand detection to:", enable);
+    console.log("[HandControlProvider] Attempting to toggle hand detection to:", enable);
     setIsHandDetectionEnabled((prev: boolean) => {
       if (prev !== enable) {
-        //console.log("[HandControlProvider] Toggling hand detection:", enable);
+        console.log("[HandControlProvider] Toggling hand detection:", enable);
         return enable;
       }
-      //console.log("[HandControlProvider] No change in hand detection state, current:", prev);
+      console.log("[HandControlProvider] No change in hand detection state, current:", prev);
       return prev;
     });
   }, [setIsHandDetectionEnabled]);
 
-  // Kích hoạt/tắt hand detection dựa trên isIndexFingerRaised
   useEffect(() => {
     if (isIndexFingerRaised) {
       if (!isHandDetectionEnabled) {
@@ -80,38 +83,14 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     }
   }, [isIndexFingerRaised, isHandDetectionEnabled, toggleHandDetection]);
 
-
-   // Tắt hand detection sau 5 giây không phát hiện ngón trỏ
-   useEffect(() => {
-    const checkInactivity = () => {
-      // console.log("[HandControlProvider] Checking inactivity:", {
-      //   isHandDetectionEnabled,
-      //   isIndexFingerRaised,
-      //   elapsed: Date.now() - lastIndexFingerTime.current,
-      // });
-      if (isHandDetectionEnabled && !isIndexFingerRaised) {
-        const elapsed = Date.now() - lastIndexFingerTime.current;
-        if (elapsed >= 5000) {
-          console.log("[HandControlProvider] No index finger detected for 5 seconds, disabling hand detection");
-          toggleHandDetection(false);
-        }
-      }
-    };
-
-    const intervalId = setInterval(checkInactivity, 1000);
-    return () => clearInterval(intervalId);
-  }, [isIndexFingerRaised, isHandDetectionEnabled, toggleHandDetection]);
-
-
   const onHover = useCallback(
     (element: Element) => {
-      if (!isHandDetectionEnabled || !handData.isHandDetected) return;
+      const currentHandData = handDataRef.current;
+      if (!isHandDetectionEnabled || !currentHandData.isHandDetected || currentHandData.isFist) return;
 
-      if (!handData.isFist) {
-        lastCursorPosition.current = handData.cursorPosition;
-      }
+      lastCursorPosition.current = currentHandData.cursorPosition;
 
-      const position = lastCursorPosition.current || handData.cursorPosition;
+      const position = lastCursorPosition.current || currentHandData.cursorPosition;
 
       if (
         lastProcessedPosition.current &&
@@ -124,7 +103,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
       lastProcessedPosition.current = { x: position.x, y: position.y };
 
       const elementsAtPoint = document.elementsFromPoint(position.x, position.y);
-      //console.log("[HandControlProvider] Elements at point:", elementsAtPoint);
+      console.log("[HandControlProvider] Elements at point:", elementsAtPoint);
 
       const targetElement = elementsAtPoint.find((el) => elements.current.has(el));
 
@@ -134,35 +113,55 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
 
       if (targetElement) {
         targetElement.classList.add("hover");
-        //console.log("[HandControlProvider] Added hover to:", targetElement);
+        console.log("[HandControlProvider] Added hover to:", targetElement);
       }
     },
-    [handData, isHandDetectionEnabled]
+    [isHandDetectionEnabled]
   );
 
   const onClick = useCallback(
     (element: Element) => {
-      if (!isHandDetectionEnabled || !handData.isHandDetected) return;
+      const currentHandData = handDataRef.current;
+      console.log("[HandControlProvider] onClick called with handData:", {
+        isHandDetected: currentHandData.isHandDetected,
+        isFist: currentHandData.isFist,
+        isHandDetectionEnabled,
+        lastFistState: lastFistState.current,
+        isClickPending: isClickPending.current,
+      });
 
-      if (handData.isFist && !lastFistState.current && !isClickPending.current) {
+      if (!isHandDetectionEnabled || !currentHandData.isHandDetected) {
+        console.log("[HandControlProvider] onClick skipped: Hand detection disabled or hand not detected");
+        return;
+      }
+
+      if (currentHandData.isFist && !lastFistState.current && !isClickPending.current) {
+        console.log("[HandControlProvider] Fist detected, preparing to click");
         lastFistState.current = true;
         isClickPending.current = true;
 
-        const clickPosition = lastCursorPosition.current || handData.cursorPosition;
+        const clickPosition = lastCursorPosition.current || currentHandData.cursorPosition;
+        console.log("[HandControlProvider] Click position:", clickPosition);
 
         fistDebounceTimeout.current = setTimeout(() => {
-          const elementAtPoint = document.elementFromPoint(clickPosition.x, clickPosition.y);
-          if (elementAtPoint && elements.current.has(elementAtPoint)) {
-            elementAtPoint.dispatchEvent(new Event("click", { bubbles: true }));
+          const elementsAtPoint = document.elementsFromPoint(clickPosition.x, clickPosition.y);
+          console.log("[HandControlProvider] Elements at click position:", elementsAtPoint);
+          const elementAtPoint = elementsAtPoint.find((el) => elements.current.has(el));
+          console.log("[HandControlProvider] Element at click position (registered):", elementAtPoint);
+          if (elementAtPoint) {
+            const clickEvent = new Event("click", { bubbles: true, cancelable: true });
+            elementAtPoint.dispatchEvent(clickEvent);
             console.log("[HandControlProvider] Clicked element:", elementAtPoint);
+          } else {
+            console.log("[HandControlProvider] No registered element found at click position");
           }
+          lastFistState.current = false;
           isClickPending.current = false;
+          console.log("[HandControlProvider] Click processing completed, resetting states");
         }, 150);
-      } else if (!handData.isFist) {
-        lastFistState.current = false;
       }
     },
-    [handData, isHandDetectionEnabled]
+    [isHandDetectionEnabled]
   );
 
   useEffect(() => {
@@ -181,17 +180,26 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     setIsHandDetected(handData.isHandDetected);
     if (handData.isHandDetected) {
       setCursorPosition(handData.cursorPosition);
+      lastHandDetectedTime.current = Date.now();
     }
   }, [handData]);
 
   useEffect(() => {
+    let lastFistStateForDetect = false;
+
     const detect = () => {
+      const currentHandData = handDataRef.current;
       const now = performance.now();
-      if (now - lastDetectTime.current < 33) {
+      if (now - lastDetectTime.current < 100) {
         animationFrameId.current = requestAnimationFrame(detect);
         return;
       }
       lastDetectTime.current = now;
+
+      if (!currentHandData.isHandDetected && now - lastHandDetectedTime.current > 5000) {
+        console.log("[HandControlProvider] No hand detected for 5 seconds, pausing detection loop");
+        return;
+      }
 
       if (elements.current.size === 0) {
         console.log("[HandControlProvider] No elements registered, skipping detection");
@@ -199,15 +207,31 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
         elements.current.forEach((element) => {
           if (!document.body.contains(element)) {
             elements.current.delete(element);
-            //console.log("[HandControlProvider] Removed invalid element:", element);
+            console.log("[HandControlProvider] Removed invalid element:", element);
           }
         });
 
         if (isHandDetectionEnabled) {
-          elements.current.forEach((element) => {
-            onHover(element);
-            onClick(element);
-          });
+          const hasHandDataChanged =
+            lastHandData.current.isHandDetected !== currentHandData.isHandDetected ||
+            lastHandData.current.cursorPosition.x !== currentHandData.cursorPosition.x ||
+            lastHandData.current.cursorPosition.y !== currentHandData.cursorPosition.y;
+
+          const isFistChanged = lastHandData.current.isFist !== currentHandData.isFist;
+
+          if (hasHandDataChanged) {
+            if (!currentHandData.isFist) {
+              elements.current.forEach(onHover);
+            }
+          }
+
+          if (isFistChanged && currentHandData.isFist && !lastFistStateForDetect) {
+            console.log("[HandControlProvider] isFist changed to true, triggering onClick");
+            elements.current.forEach(onClick);
+          }
+
+          lastFistStateForDetect = currentHandData.isFist;
+          lastHandData.current = { ...currentHandData };
         }
       }
 
@@ -221,10 +245,11 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
         cancelAnimationFrame(animationFrameId.current);
       }
       if (fistDebounceTimeout.current) {
+        console.log("[HandControlProvider] Cleaning up detect useEffect, cancelling click timeout");
         clearTimeout(fistDebounceTimeout.current);
       }
     };
-  }, [onHover, onClick, isHandDetectionEnabled]);
+  }, [onHover, onClick, isHandDetectionEnabled]); // Loại bỏ handData khỏi dependencies
 
   useEffect(() => {
     if (!handData.isHandDetected) {
@@ -236,20 +261,28 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
       isClickPending.current = false;
       lastProcessedPosition.current = null;
       if (fistDebounceTimeout.current) {
+        console.log("[HandControlProvider] Hand not detected, cancelling click timeout");
         clearTimeout(fistDebounceTimeout.current);
+        fistDebounceTimeout.current = null;
       }
     }
   }, [handData]);
 
   return (
     <HandControlContext.Provider
-      value={{ onHover, onClick, registerElement, unregisterElement, isHandDetectionEnabled, toggleHandDetection, isIndexFingerRaised }}
+      value={{
+        onHover,
+        onClick,
+        registerElement,
+        unregisterElement,
+        isHandDetectionEnabled,
+        toggleHandDetection,
+      }}
     >
       {children}
       {isHandDetected && isHandDetectionEnabled && (
         <div
-          className={`absolute cursor w-8 h-8 rounded-full bg-pink-500 border-4 border-white pointer-events-none z-100 transition-all duration-50 ${isLoading ? "opacity-0" : "opacity-100"
-            }`}
+          className={`absolute cursor w-8 h-8 rounded-full bg-pink-500 border-4 border-white pointer-events-none z-100 transition-all duration-50 ${isLoading ? "opacity-0" : "opacity-100"}`}
           style={{
             left: `${(cursorPosition.x / window.innerWidth) * 100}%`,
             top: `${(cursorPosition.y / window.innerHeight) * 100}%`,

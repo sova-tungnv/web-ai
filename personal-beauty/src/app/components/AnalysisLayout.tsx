@@ -79,7 +79,7 @@ const AnalysisLayout = React.memo(
                         Analysis Result
                     </h2>
                     {result ? (
-                        <p className="text-lg md:text-xl text-gray-700 mb-4">
+                        <div className="text-lg md:text-xl text-gray-700 mb-4">
                             Your result is
                             <span className="font-bold text-pink-600">
                                 <div
@@ -89,11 +89,11 @@ const AnalysisLayout = React.memo(
                                 ></div>
                             </span>
                             .
-                        </p>
+                        </div>
                     ) : (
-                        <p className="text-lg md:text-xl text-gray-500 animate-pulse mb-4">
+                        <div className="text-lg md:text-xl text-gray-500 animate-pulse mb-4">
                             Waiting for analysis...
-                        </p>
+                        </div>
                     )}
                     {colorPalette && (
                         <div className="flex-1">

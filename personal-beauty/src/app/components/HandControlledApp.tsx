@@ -23,6 +23,7 @@ export default function HandControlledApp({ children, onMenuSelect }: HandContro
   const handleMenuSelect = (view: ViewType) => {
     setIsLoading(true);
     onMenuSelect(view);
+    console.log(`[HandControlledApp] Menu selected: ${view}`);
     setCurrentView(view);
   };
 

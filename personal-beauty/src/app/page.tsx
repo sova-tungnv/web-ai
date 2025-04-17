@@ -15,6 +15,7 @@ export default function Home() {
   const { setIsLoading } = useLoading();
 
   const handleMenuSelect = (view: ViewType) => {
+    console.log(`[Home] Menu selected: ${view}`);
     if (view === VIEWS.HOME) {
       setIsLoading(false);
     }

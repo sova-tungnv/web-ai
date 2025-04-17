@@ -15,9 +15,7 @@ import { useLoading } from "../context/LoadingContext";
 
 export default function CosmeticSurgery() {
   const { stream, videoRef, error: webcamError } = useWebcam();
-  const [colorTone, setColorTone] = useState<string | null>(null);
-  const [eyeSuggestion, setEyeSuggestion] = useState<string | null>(null);
-  const [faceSuggestion, setFaceSuggestion] = useState<string | null>(null);
+  const [faceSuggestions, setFaceSuggestions] = useState<string[] | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [isFaceLandmarkerReady, setIsFaceLandmarkerReady] = useState(false);
@@ -193,27 +191,8 @@ export default function CosmeticSurgery() {
         // ctx.fill();
         if (results.faceLandmarks && results.faceLandmarks.length > 0) {
           const landmarks = results.faceLandmarks[0];
-          const foreheadPoint = landmarks[10];
-          const x = foreheadPoint.x * canvas.width;
-          const y = foreheadPoint.y * canvas.height;
-
-          if (
-            x >= 10 &&
-            y >= 10 &&
-            x + 10 <= canvas.width &&
-            y + 10 <= canvas.height
-          ) {
-            const imageData = ctx.getImageData(x - 10, y - 10, 20, 20);
-            const tone = analyzeColorTone(imageData);
-            setColorTone(tone);
-          } else {
-            setColorTone(null);
-          }
           analyzeFace(landmarks);
-
-          drawingFaceGrid(landmarks);
-        } else {
-          setColorTone(null);
+          // drawingFaceGrid(landmarks);
         }
       } catch (err) {
         console.error("[CosmeticSurgery] Error during face detection:", err);
@@ -231,46 +210,6 @@ export default function CosmeticSurgery() {
     };
   }, [isFaceLandmarkerReady, stream]);
 
-  const analyzeColorTone = (imageData: ImageData): string => {
-    const data = imageData.data;
-    let r = 0,
-      g = 0,
-      b = 0;
-
-    for (let i = 0; i < data.length; i += 4) {
-      r += data[i];
-      g += data[i + 1];
-      b += data[i + 2];
-    }
-
-    const pixelCount = data.length / 4;
-    r = r / pixelCount;
-    g = g / pixelCount;
-    b = b / pixelCount;
-
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    let h = 0,
-      s = 0,
-      v = max;
-
-    const d = max - min;
-    s = max === 0 ? 0 : d / max;
-
-    if (max === min) {
-      h = 0;
-    } else {
-      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
-      else if (max === g) h = (b - r) / d + 2;
-      else h = (r - g) / d + 4;
-      h /= 6;
-    }
-
-    if (h < 0.1 || h > 0.9) return "Warm";
-    if (h > 0.3 && h < 0.6) return "Cool";
-    return "Neutral";
-  };
-
   const calculateDistance = (
     point1: NormalizedLandmark,
     point2: NormalizedLandmark
@@ -279,147 +218,284 @@ export default function CosmeticSurgery() {
       Math.pow(point1.x - point2.x, 2) + Math.pow(point1.y - point2.y, 2)
     );
   };
-  // Hàm phân tích khuôn mặt
-  const analyzeFace = (landmarks: NormalizedLandmark[]) => {
-    // Tính toán khoảng cách giữa các điểm mốc trên khuôn mặt
-    const leftEyeOuter = landmarks[33];
-    const leftEyeInner = landmarks[133];
-    const rightEyeInner = landmarks[362];
-    const rightEyeOuter = landmarks[263];
+
+  const analyzeEyes = (landmarks: NormalizedLandmark[]) => {
+    // Eye position relative to nose bridge
+    const noseBridge = landmarks[168];
+    const leftEyeCenter = landmarks[159];
+    const rightEyeCenter = landmarks[386];
+
+    // Check eye symmetry relative to nose
+    const leftEyeToNose = calculateDistance(leftEyeCenter, noseBridge);
+    const rightEyeToNose = calculateDistance(rightEyeCenter, noseBridge);
+    const eyeSymmetryDiff = Math.abs(leftEyeToNose - rightEyeToNose);
+
+    // Calculate eye sizes
+    const leftEyeWidth = calculateDistance(landmarks[33], landmarks[133]);
+    const rightEyeWidth = calculateDistance(landmarks[362], landmarks[263]);
+    const leftEyeHeight = calculateDistance(landmarks[145], landmarks[159]);
+    const rightEyeHeight = calculateDistance(landmarks[374], landmarks[386]);
+
+    // Analyze eyebrows
+    const leftEyebrowThickness = calculateDistance(
+      landmarks[282],
+      landmarks[295]
+    );
+    const rightEyebrowThickness = calculateDistance(
+      landmarks[52],
+      landmarks[65]
+    );
+    const leftEyebrowLength = calculateDistance(landmarks[282], landmarks[296]);
+    const rightEyebrowLength = calculateDistance(landmarks[52], landmarks[66]);
+
+    let suggestions = [];
+
+    // Check eye symmetry
+    if (eyeSymmetryDiff > 0.02) {
+      suggestions.push("<p>Mắt có sự bất đối xứng nhẹ so với sống mũi</p>");
+    }
+
+    // Check eye size
+    const avgEyeWidth = (leftEyeWidth + rightEyeWidth) / 2;
+    if (avgEyeWidth < 0.03) {
+      suggestions.push(
+        "<p>Mắt tương đối nhỏ, có thể cân nhắc phẫu thuật mở rộng</p>"
+      );
+    }
+
+    // Check eyebrow symmetry
+    const eyebrowThicknessDiff = Math.abs(
+      leftEyebrowThickness - rightEyebrowThickness
+    );
+    if (eyebrowThicknessDiff > 0.01) {
+      suggestions.push(
+        "<p>Lông mày không đều nhau, cần điều chỉnh để cân đối</p>"
+      );
+    }
+
+    // Check eyebrow thickness
+    const avgEyebrowThickness =
+      (leftEyebrowThickness + rightEyebrowThickness) / 2;
+    if (avgEyebrowThickness < 0.015) {
+      suggestions.push(
+        "<p>Lông mày khá mỏng, có thể cần cấy hoặc phun xăm</p>"
+      );
+    } else if (avgEyebrowThickness > 0.025) {
+      suggestions.push("<p>Lông mày dày, có thể tỉa gọn để tạo form</p>");
+    }
+
+    return suggestions;
+  };
+
+  const analyzeNose = (landmarks: NormalizedLandmark[]) => {
+    // Get nose bridge points
+    const noseBridge = landmarks[168];
+    const noseTop = landmarks[6];
     const noseTip = landmarks[1];
-    const leftMouth = landmarks[61];
-    const rightMouth = landmarks[291];
-    const upperLip = landmarks[0];
-    const lowerLip = landmarks[17];
-    const chin = landmarks[152];
+
+    // Get nostril points
+    const leftNostril = landmarks[242];
+    const rightNostril = landmarks[462];
+
+    // Get face width points for proportion comparison
     const leftCheek = landmarks[234];
     const rightCheek = landmarks[454];
-
-    // Tính toán tỷ lệ khuôn mặt
     const faceWidth = calculateDistance(leftCheek, rightCheek);
-    const faceHeight = calculateDistance(landmarks[10], chin);
-    const eyeDistance = calculateDistance(leftEyeInner, rightEyeInner);
-    const mouthWidth = calculateDistance(leftMouth, rightMouth);
-    const noseLength = calculateDistance(landmarks[168], noseTip);
-    const chinHeight = calculateDistance(lowerLip, chin);
 
-    // Phân tích cân đối khuôn mặt
-    const idealFaceRatio = 1.618; // Tỷ lệ vàng
-    const currentFaceRatio = faceHeight / faceWidth;
-    const faceSuggestions = [];
+    // Calculate nose measurements
+    const noseHeight = calculateDistance(noseTop, noseTip);
+    const noseWidth = calculateDistance(leftNostril, rightNostril);
+    const leftNostrialWidth = calculateDistance(noseTip, leftNostril);
+    const rightNostrialWidth = calculateDistance(noseTip, rightNostril);
 
-    // Phân tích mắt
-    if (eyeDistance / faceWidth < 0.25) {
-      setEyeSuggestion(
-        "Mắt nằm gần nhau. Hãy cân nhắc các kỹ thuật trang điểm mắt để tạo ảo giác đôi mắt rộng hơn."
-      );
-    } else if (eyeDistance / faceWidth > 0.3) {
-      setEyeSuggestion(
-        "Mắt cách xa nhau. Hãy cân nhắc các kỹ thuật trang điểm mắt để tạo ảo giác đôi mắt gần nhau hơn."
-      );
-    } else {
-      setEyeSuggestion("Mắt có khoảng cách hợp lý. Không cần điều chỉnh.");
+    let suggestions = [];
+
+    // Check nostril symmetry
+    const nostrialDifference = Math.abs(leftNostrialWidth - rightNostrialWidth);
+    if (nostrialDifference > 0.01) {
+      suggestions.push("<p>Hai bên cánh mũi chưa cân đối</p>");
     }
 
-    // Phân tích kích thước mũi
-    const noseWidth = calculateDistance(landmarks[102], landmarks[331]); // Điểm rộng nhất của mũi
-    const noseHeight = calculateDistance(landmarks[168], noseTip); // Chiều cao mũi
-    const noseBase = calculateDistance(landmarks[198], landmarks[420]); // Cánh mũi
-
-    if (noseWidth / faceWidth > 0.35) {
-      faceSuggestions.push("Mũi có vẻ rộng. Hãy cân nhắc thu gọn cánh mũi.");
-    } else if (noseWidth / faceWidth < 0.25) {
-      faceSuggestions.push(
-        "Mũi có vẻ hẹp. Có thể cân nhắc nâng mũi để cân đối hơn."
+    // Check nose bridge height
+    const noseBridgeHeight = calculateDistance(noseBridge, noseTip);
+    if (noseBridgeHeight < 0.1) {
+      suggestions.push(
+        "<p>Sống mũi tương đối thấp, có thể cân nhắc nâng mũi</p>"
       );
     }
 
-    if (noseHeight / faceHeight > 0.33) {
-      faceSuggestions.push("Mũi có vẻ cao so với khuôn mặt.");
-    } else if (noseHeight / faceHeight < 0.27) {
-      faceSuggestions.push("Mũi có vẻ thấp. Có thể cân nhắc nâng mũi.");
+    // Check nose width proportions
+    const noseToFaceRatio = noseWidth / faceWidth;
+    if (noseToFaceRatio > 0.35) {
+      suggestions.push("<p>Mũi hơi to so với khuôn mặt</p>");
+    } else if (noseToFaceRatio < 0.2) {
+      suggestions.push("<p>Mũi khá nhỏ so với khuôn mặt</p>");
     }
 
-    if (noseBase / noseHeight > 0.9) {
-      faceSuggestions.push("Đầu mũi có vẻ to. Hãy cân nhắc thu gọn đầu mũi.");
-    }
-
-    // Phân tích gò má
-    const cheekboneWidth = calculateDistance(leftCheek, rightCheek);
-    const cheekboneHeight = calculateDistance(landmarks[234], landmarks[111]); // Độ cao gò má
-    const cheekboneLength = calculateDistance(landmarks[234], landmarks[447]); // Chiều dài gò má
-
-    if (cheekboneWidth / faceWidth > 0.8) {
-      faceSuggestions.push(
-        "Gò má khá rộng. Có thể cân nhắc thu gọn để tạo khuôn mặt thon gọn hơn."
-      );
-    } else if (cheekboneWidth / faceWidth < 0.65) {
-      faceSuggestions.push(
-        "Gò má hẹp. Có thể cân nhắc làm đầy để tạo khuôn mặt cân đối hơn."
-      );
-    }
-
-    if (cheekboneHeight / faceHeight > 0.15) {
-      faceSuggestions.push(
-        "Gò má cao. Có thể cân nhắc điều chỉnh để hài hòa với khuôn mặt."
-      );
-    } else if (cheekboneHeight / faceHeight < 0.1) {
-      faceSuggestions.push(
-        "Gò má thấp. Có thể cân nhắc nâng gò má để tạo khối cho khuôn mặt."
-      );
-    }
-
-    if (cheekboneLength / faceWidth > 0.4) {
-      faceSuggestions.push(
-        "Gò má dài. Có thể cân nhắc thu gọn để cân đối với khuôn mặt."
-      );
-    } else if (cheekboneLength / faceWidth < 0.3) {
-      faceSuggestions.push(
-        "Gò má ngắn. Có thể cân nhắc kéo dài để tạo đường nét thanh thoát."
-      );
-    }
-    // Phân tích mũi và cằm
-    if (noseLength / faceHeight > 0.33) {
-      faceSuggestions.push(
-        "Mũi có vẻ dài so với tỉ lệ khuôn mặt. Hãy cân nhắc việc chỉnh hình mũi."
-      );
-    }
-
-    if (chinHeight / faceHeight < 0.2) {
-      faceSuggestions.push(
-        "Cằm có vẻ ngắn. Hãy cân nhắc việc cải thiện hoặc làm đầy cằm."
-      );
-    } else if (chinHeight / faceHeight > 0.25) {
-      faceSuggestions.push("Cằm có vẻ nhô ra. Hãy cân nhắc thu gọn cằm.");
-    } else {
-      faceSuggestions.push("Cằm có tỷ lệ hợp lý. Không cần điều chỉnh.");
-    }
-
-    // Kiểm tra cân đối hai bên mặt
-    const leftFaceWidth = calculateDistance(leftCheek, noseTip);
-    const rightFaceWidth = calculateDistance(rightCheek, noseTip);
-    const faceSymmetryRatio =
-      Math.abs(leftFaceWidth - rightFaceWidth) /
-      Math.max(leftFaceWidth, rightFaceWidth);
-
-    if (faceSymmetryRatio > 0.1) {
-      faceSuggestions.push(
-        "Phát hiện sự không đối xứng trên khuôn mặt. Hãy cân nhắc tạo hình đường nét khuôn mặt."
-      );
-    }
-
-    setFaceSuggestion(faceSuggestions.join(" "));
-
-    // Gợi ý tổng quát
+    return suggestions;
   };
+
+  const analyzeCheeks = (landmarks: NormalizedLandmark[]) => {
+    // Get cheekbone landmarks
+    const leftCheekbone = landmarks[234];
+    const rightCheekbone = landmarks[454];
+    const noseBridge = landmarks[168];
+    const chin = landmarks[152];
+
+    // Calculate facial measurements
+    const faceHeight = calculateDistance(landmarks[10], chin);
+    const faceWidth = calculateDistance(leftCheekbone, rightCheekbone);
+
+    // Check cheek symmetry
+    const leftCheekHeight = calculateDistance(leftCheekbone, noseBridge);
+    const rightCheekHeight = calculateDistance(rightCheekbone, noseBridge);
+    const cheekSymmetryDiff = Math.abs(leftCheekHeight - rightCheekHeight);
+
+    let suggestions = [];
+
+    // Analyze cheek symmetry
+    if (cheekSymmetryDiff > 0.02) {
+      suggestions.push(
+        "<p>Gò má hai bên không cân đối, có thể cần điều chỉnh</p>"
+      );
+    }
+
+    // Analyze cheekbone prominence
+    const cheekboneProminence =
+      (leftCheekHeight + rightCheekHeight) / 2 / faceWidth;
+    if (cheekboneProminence < 0.3) {
+      suggestions.push(
+        "<p>Gò má tương đối thấp, có thể cân nhắc độn gò má hoặc trang điểm tạo khối để làm nổi bật</p>"
+      );
+    } else if (cheekboneProminence > 0.45) {
+      suggestions.push(
+        "<p>Gò má cao và rõ nét, phù hợp với các kiểu trang điểm nhẹ nhàng</p>"
+      );
+    }
+
+    return suggestions;
+  };
+
+  const analyzeFaceShape = (landmarks: NormalizedLandmark[]) => {
+    // Get key face shape points
+    const leftCheek = landmarks[234];
+    const rightCheek = landmarks[454];
+    const chin = landmarks[152];
+    const forehead = landmarks[10];
+    const leftJaw = landmarks[207];
+    const rightJaw = landmarks[427];
+
+    // Calculate face width at different levels
+    const upperFaceWidth = calculateDistance(landmarks[137], landmarks[367]);
+    const midFaceWidth = calculateDistance(leftCheek, rightCheek);
+    const jawWidth = calculateDistance(leftJaw, rightJaw);
+
+    // Calculate face height
+    const faceHeight = calculateDistance(forehead, chin);
+
+    let suggestions = [];
+
+    // Check face symmetry
+    const leftCheekToCenter = calculateDistance(leftCheek, landmarks[168]);
+    const rightCheekToCenter = calculateDistance(rightCheek, landmarks[168]);
+    const asymmetryRatio =
+      Math.abs(leftCheekToCenter - rightCheekToCenter) / midFaceWidth;
+
+    if (asymmetryRatio > 0.05) {
+      suggestions.push("<p>Nhận thấy sự không cân đối nhẹ giữa hai bên má</p>");
+    }
+
+    // Analyze face width ratios
+    const upperToMidRatio = upperFaceWidth / midFaceWidth;
+    const jawToMidRatio = jawWidth / midFaceWidth;
+
+    if (jawToMidRatio > 0.95) {
+      suggestions.push(
+        "<p>Phần hàm tương đối rộng, có thể trang điểm tạo khối để khuôn mặt thon gọn hơn</p>"
+      );
+    }
+
+    if (upperToMidRatio < 0.85) {
+      suggestions.push(
+        "<p>Phần má hơi đầy, có thể sử dụng phấn tạo khối để khuôn mặt cân đối hơn</p>"
+      );
+    }
+
+    return suggestions;
+  };
+  const analyzeLips = (landmarks: NormalizedLandmark[]) => {
+    // Get key lip points
+    const upperLipCenter = landmarks[0];
+    const lowerLipCenter = landmarks[17];
+    const leftLipCorner = landmarks[61];
+    const rightLipCorner = landmarks[291];
+    const upperLipTop = landmarks[13];
+    const lowerLipBottom = landmarks[14];
+
+    let suggestions = [];
+
+    // Check lip symmetry
+    const leftLipWidth = calculateDistance(leftLipCorner, upperLipCenter);
+    const rightLipWidth = calculateDistance(rightLipCorner, upperLipCenter);
+    const lipAsymmetry = Math.abs(leftLipWidth - rightLipWidth);
+
+    if (lipAsymmetry > 0.015) {
+      suggestions.push(
+        "<p>Môi có sự bất đối xứng nhẹ, có thể cần điều chỉnh</p>"
+      );
+    }
+
+    // Check lip proportions
+    const lipHeight = calculateDistance(upperLipTop, lowerLipBottom);
+    const lipWidth = calculateDistance(leftLipCorner, rightLipCorner);
+    const lipRatio = lipHeight / lipWidth;
+
+    if (lipRatio < 0.3) {
+      suggestions.push(
+        "<p>Môi khá mỏng, có thể cân nhắc tiêm filler để tăng độ đầy</p>"
+      );
+    }
+
+    // Check jaw alignment
+    const leftJaw = landmarks[207];
+    const rightJaw = landmarks[427];
+    const jawlineAngle = Math.abs(leftJaw.y - rightJaw.y);
+
+    if (jawlineAngle > 0.02) {
+      suggestions.push(
+        "<p>Xương hàm không đều, có thể cân nhắc phẫu thuật chỉnh nha để cân đối</p>"
+      );
+    }
+
+    return suggestions;
+  };
+
+  // Add analyzeEyes to analyzeFace function
+  const analyzeFace = (landmarks: NormalizedLandmark[]) => {
+    // ... existing measurements ...
+
+    const suggestions = [
+      ...analyzeEyes(landmarks),
+      ...analyzeCheeks(landmarks),
+      ...analyzeNose(landmarks),
+      ...analyzeFaceShape(landmarks),
+      ...analyzeLips(landmarks),
+    ];
+    setFaceSuggestions(suggestions);
+    // ... rest of the function ...
+  };
+
   return (
-    <AnalysisLayout
-      title="Cosmetic Surgery"
-      description="Analyze facial features for cosmetic surgery recommendations."
-      videoRef={videoRef}
-      canvasRef={canvasRef}
-      result={faceSuggestion}
-      error={error || webcamError}
-    />
+    <div>
+      <AnalysisLayout
+        title="Cosmetic Surgery"
+        description="Analyze facial features for cosmetic surgery recommendations."
+        videoRef={videoRef}
+        canvasRef={canvasRef}
+        result={faceSuggestions?.join("") || null}
+        error={error || webcamError}
+      />
+      <>{faceSuggestions}</>
+    </div>
   );
 }

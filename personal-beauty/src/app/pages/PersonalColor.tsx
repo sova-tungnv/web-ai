@@ -1,3 +1,4 @@
+/* eslint-disable react/display-name */
 // src/components/page/PersonalColor.tsx
 
 "use client";
@@ -303,7 +304,7 @@ export default function PersonalColor() {
 
     const selectionButtons = useMemo(
         () => (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-wrap gap-6">
                 {areas.map((area) => (
                     <SelectionButton key={area} area={area} selectedArea={selectedArea} setSelectedArea={setSelectedArea} />
                 ))}

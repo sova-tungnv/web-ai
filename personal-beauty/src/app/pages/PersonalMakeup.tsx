@@ -346,21 +346,25 @@ export default function PersonalColor() {
 
                     // Làm sạch canvas trước khi vẽ
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    if (canvasRef.current && video) {
-                        const videoWidth = 1130;
 
-                        const radio = video.videoHeight / video.videoWidth;
-                        video.style.width = videoWidth + "px";
-                        video.style.height = videoWidth * radio + "px";
-
-                        canvasRef.current.style.width = videoWidth + "px";
-                        canvasRef.current.style.transform =
-                            "translateX(-29%) translateY(1px)";
-                        canvasRef.current.style.height =
-                            videoWidth * radio + "px";
-                        canvasRef.current.width = video.videoWidth;
-                        canvasRef.current.height = video.videoHeight;
+                    const videoAspect = video.videoWidth / video.videoHeight;
+                    const canvasAspect = canvas.width / canvas.height;
+    
+                    let drawWidth, drawHeight, offsetX, offsetY;
+    
+                    if (videoAspect > canvasAspect) {
+                        drawWidth = canvas.width;
+                        drawHeight = canvas.width / videoAspect;
+                        offsetX = 0;
+                        offsetY = (canvas.height - drawHeight) / 2;
+                    } else {
+                        drawHeight = canvas.height;
+                        drawWidth = canvas.height * videoAspect;
+                        offsetY = 0;
+                        offsetX = (canvas.width - drawWidth) / 2;
                     }
+    
+                    ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
                     // const drawingUtils = new DrawingUtils(ctx);
                     // for (const landmarks of results.faceLandmarks) {
                     //     drawingUtils.drawConnectors(

@@ -1,3 +1,4 @@
+/* eslint-disable react/display-name */
 // src/context/AnalysisLayout.tsx
 
 "use client";
@@ -40,13 +41,8 @@ const AnalysisLayout = React.memo(
             )}
             <div className="flex flex-col md:flex-row gap-6 md:gap-8 flex-1 overflow-hidden">
                 {/* Phần video live (2/3) */}
-                <div className="md:w-2/3 p-4 md:p-6 rounded-xl flex flex-row items-center">
-                    {selectionButtons && (
-                        <div className="flex flex-col gap-6 ml-6">
-                            {selectionButtons}
-                        </div>
-                    )}
-                    <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] aspect-[9/16] rounded-2xl overflow-hidden shadow-lg border-4 border-gray-200 bg-white">
+                <div className="md:w-2/3 px-6 md:px-10 rounded-xl flex flex-col items-center">
+                    <div className="relative w-full overflow-hidden rounded-2xl shadow-lg border-2 border-gray-200 bg-white" style={{ paddingTop: "75%" /* 480/640 = 0.75 */ }}>
                         <video
                             ref={videoRef}
                             className="absolute inset-0 w-full h-full object-cover"
@@ -56,11 +52,16 @@ const AnalysisLayout = React.memo(
                         />
                         <canvas
                             ref={canvasRef}
-                            width={1080}
-                            height={1920}
-                            className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                            width={640}
+                            height={480}
+                            className="absolute inset-0 w-full object-contain pointer-events-none"
                         />
                     </div>
+                    {selectionButtons && (
+                        <div className="flex gap-6 mt-3">
+                            {selectionButtons}
+                        </div>
+                    )}
                 </div>
 
                 {/* Phần kết quả (1/3) */}

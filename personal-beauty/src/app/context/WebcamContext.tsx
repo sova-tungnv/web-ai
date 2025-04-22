@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/context/WebcamContext.tsx
 
 "use client";
@@ -15,13 +16,16 @@ interface HandData {
 
 interface WebcamContextType {
   stream: MediaStream | null;
-  videoRef: React.RefObject<HTMLVideoElement>;
+  videoRef: any;
   error: string | null;
   restartStream: () => Promise<void>;
   handData: HandData;
   setIsHandDetectionEnabled: (enabled: boolean) => void;
   isIndexFingerRaised: boolean;
-  isHandDetectionEnabled: boolean; // Thêm để đồng bộ
+  isHandDetectionEnabled: boolean;
+  detectionResults: { [key: string]: any };
+  currentView: string;
+  setCurrentView: (view: any) => void;
 }
 
 const WebcamContext = createContext<WebcamContextType | undefined>(undefined);
@@ -43,7 +47,6 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const animationFrameId = useRef<number | null>(null);
   const lightweightFrameId = useRef<number | null>(null);
   const lastDetectTime = useRef(0);
-  const lastLightweightDetectTime = useRef(0);
   const lastPositionBeforeFist = useRef<{ x: number; y: number } | null>(null);
   const smoothPosition = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const ALPHA = 0.6;
@@ -60,8 +63,8 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [VIEWS.PERSONAL_COLOR]: ["hand", "face"],
     [VIEWS.PERSONAL_BODY_TYPE]: ["pose"],
     [VIEWS.HOME]: ["hand"],
-    [VIEWS.HAIR_COLOR]: ["face"],
-    [VIEWS.PERSONAL_MAKEUP]: ["face"],
+    [VIEWS.HAIR_COLOR]: ["hand"],
+    [VIEWS.PERSONAL_MAKEUP]: ["hand"],
     [VIEWS.COSMETIC_SURGERY]: ["face", "pose"],
   };
 
@@ -152,6 +155,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         video: {
           width: { ideal: 640 },
           height: { ideal: 480 },
+          frameRate: { ideal: 10, max: 10 }
         },
       });
       setStream(mediaStream);
@@ -184,7 +188,6 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       videoRef.current.play().catch((err) => {
         console.error("[WebcamProvider] Error playing video:", err);
       });
-      console.log("[WebcamProvider] Video stream attached to videoRef");
     }
   }, [stream]);
 
@@ -206,13 +209,13 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (type === "detectionResult") {
         if (error) {
           setError(`Detection error: ${error}`);
-          console.log("[WebcamProvider] Detection error:", error);
+
           return;
         }
 
           // Tính thời gian truyền và nhận (tổng thời gian từ lúc gửi đến lúc nhận)
-          const receiveTime = performance.now();
-          console.log(`====================> [WebcamProvider] Received detection results at: ${receiveTime}ms, total round-trip time: ${(receiveTime - lastDetectTime.current).toFixed(2)}ms`);
+          // const receiveTime = performance.now();
+          // console.log(`====================> [WebcamProvider] Received detection results at: ${receiveTime}ms, total round-trip time: ${(receiveTime - lastDetectTime.current).toFixed(2)}ms`);
           
         // console.log("[WebcamProvider] Detection results received:", results);
         setDetectionResults(results);
@@ -326,7 +329,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const video = videoRef.current;
     const detect = async () => {
       const now = performance.now();
-      if (now - lastDetectTime.current < 33) {
+      if (now - lastDetectTime.current < 50) { // 10 FPS
         animationFrameId.current = requestAnimationFrame(detect);
         return;
       }
@@ -446,6 +449,9 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setIsHandDetectionEnabled,
         isIndexFingerRaised,
         isHandDetectionEnabled, // Truyền ra để đồng bộ
+        currentView,
+        detectionResults,
+        setCurrentView
       }}
     >
       {children}

@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/context/VisionWorker.ts
 
-import { HandLandmarker, FaceLandmarker, PoseLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { HandLandmarker, FaceLandmarker, PoseLandmarker, FilesetResolver, ImageSegmenter } from "@mediapipe/tasks-vision";
 
 const models: { [key: string]: any } = {};
 const modelConfigs: { [key: string]: any } = {
@@ -28,6 +29,19 @@ const modelConfigs: { [key: string]: any } = {
       numFaces: 1,
     },
   },
+  hair: {
+    class: ImageSegmenter,
+    options: {
+      baseOptions: {
+          modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/image_segmenter/hair_segmenter/float32/1/hair_segmenter.tflite",
+          delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      outputCategoryMask: true,
+      outputConfidenceMasks: false
+    },
+  },
   pose: {
     class: PoseLandmarker,
     options: {
@@ -44,6 +58,51 @@ const modelConfigs: { [key: string]: any } = {
 let filesetResolver: any = null;
 let frameCounter = 0;
 let isDetecting = false;
+const frameQueue: any = [];
+
+const handleDetect = async () => {
+  if(frameQueue.length > 0){
+    const { imageBitmap, timestamp, modelTypes } = frameQueue.shift()!;
+    isDetecting = true;
+    frameQueue.shift()!;
+    
+    // Ghi lại thời gian nhận dữ liệu từ WebcamContext
+    // const receiveTime = performance.now();
+   // console.log(`[VisionWorker] Received imageData at: ${receiveTime}ms, timestamp: ${timestamp}`);
+    try {
+      frameCounter++;
+      //const imageBitmap = await createImageBitmap(imageData);
+      const results: { [key: string]: any } = {};
+      //const startDetectionTime = performance.now();
+      for (const modelType of modelTypes) {
+        if (models[modelType]) {
+  
+          if (modelType !== "hand" && frameCounter % 3 !== 0) {
+            results[modelType] = await models[modelType].detectForVideo(imageBitmap, timestamp);
+          } else {
+            results[modelType] = await models[modelType].detectForVideo(imageBitmap, timestamp);
+          }
+          //console.log(`[VisionWorker] Detection result for ${modelType}:`, results[modelType]);
+        }
+      }
+      //console.log(`[VisionWorker] Detection took: ${(performance.now() - startDetectionTime).toFixed(2)}ms`);
+  
+      // Ghi lại thời gian hoàn thành xử lý và gửi kết quả
+      // const sendTime = performance.now();
+      // console.log(`[VisionWorker] Sending detection results at: ${sendTime}ms, processing time: ${(sendTime - receiveTime).toFixed(2)}ms`);
+      //await Promise.all(promises);
+      self.postMessage({ type: "detectionResult", results });
+      imageBitmap.close();
+    } catch (err) {
+      self.postMessage({ type: "detectionResult", error: (err as Error).message });
+      console.log("[VisionWorker] Detection error:", (err as Error).message);
+    } finally {
+      isDetecting = false;
+      handleDetect();
+    }
+  }
+
+}
 
 self.onmessage = async (e: MessageEvent) => {
   const { type, data } = e.data;
@@ -77,45 +136,21 @@ self.onmessage = async (e: MessageEvent) => {
   }
 
   if (type === "detect") {
-    if (isDetecting) {
-      return;   // Đang bận -> bỏ frame này luôn
-    }
-    isDetecting = true;
-
     const { imageBitmap, timestamp, modelTypes } = data;
-    // Ghi lại thời gian nhận dữ liệu từ WebcamContext
-    const receiveTime = performance.now();
-    // console.log(`[VisionWorker] Received imageData at: ${receiveTime}ms, timestamp: ${timestamp}`);
-    try {
-      frameCounter++;
-      //const imageBitmap = await createImageBitmap(imageData);
-      const results: { [key: string]: any } = {};
-      //const startDetectionTime = performance.now();
-      for (const modelType of modelTypes) {
-        if (models[modelType]) {
-
-          if (modelType !== "hand" && frameCounter % 3 !== 0) {
-            results[modelType] = models[modelType].detectForVideo(imageBitmap, timestamp);
-          } else {
-            results[modelType] = models[modelType].detectForVideo(imageBitmap, timestamp);
-          }
-          //console.log(`[VisionWorker] Detection result for ${modelType}:`, results[modelType]);
-        }
+    if (frameQueue.length < 2) {
+      frameQueue.push({ imageBitmap, timestamp, modelTypes });
+    } else {
+      // If queue is full, replace oldest frame with newest
+      const oldestFrame = frameQueue.shift();
+      if (oldestFrame?.imageBitmap) {
+        oldestFrame.imageBitmap.close();
       }
-      //console.log(`[VisionWorker] Detection took: ${(performance.now() - startDetectionTime).toFixed(2)}ms`);
-
-      // Ghi lại thời gian hoàn thành xử lý và gửi kết quả
-      const sendTime = performance.now();
-      console.log(`[VisionWorker] Sending detection results at: ${sendTime}ms, processing time: ${(sendTime - receiveTime).toFixed(2)}ms`);
-      //await Promise.all(promises);
-      self.postMessage({ type: "detectionResult", results });
-      imageBitmap.close();
-    } catch (err) {
-      self.postMessage({ type: "detectionResult", error: (err as Error).message });
-      console.log("[VisionWorker] Detection error:", (err as Error).message);
-    } finally {
-      isDetecting = false;
+      frameQueue.push({ imageBitmap, timestamp, modelTypes });
     }
+
+    if (frameQueue.length === 0 || isDetecting) return;
+    handleDetect();
+    return;
   }
 
   if (type === "cleanup") {

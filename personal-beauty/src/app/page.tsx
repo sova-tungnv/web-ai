@@ -56,7 +56,7 @@ export default function Home() {
                   <div className="w-[300px] h-[200px] bg-white p-6 rounded-xl shadow-md border-4 border-pink-600 flex flex-col items-center justify-center">
                     <div className="text-4xl mb-4">🖐️</div>
                     <h3 className="text-2xl font-semibold text-gray-800 mb-2">Open Hand</h3>
-                    <p className="text-xl text-gray-600 text-center">Open your hand to return to Home.</p>
+                    <p className="text-xl text-gray-600 text-center">Open your hand for 2 seconds to return to Home.</p>
                   </div>
                 </div>
               </div>

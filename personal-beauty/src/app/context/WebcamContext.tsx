@@ -324,48 +324,43 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     const video = videoRef.current;
-    const canvas = document.createElement("canvas");
-    canvas.width = 320;
-    canvas.height = 240;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
     const detect = async () => {
       const now = performance.now();
-      if (now - lastDetectTime.current < 33) { // 20 FPS
-        // 10 FPS
+      if (now - lastDetectTime.current < 33) {
         animationFrameId.current = requestAnimationFrame(detect);
         return;
       }
       lastDetectTime.current = now;
-
-      if (!ctx || video.readyState < 4) {
+    
+      if (video.readyState < 4) {
         console.log("[WebcamProvider] Video not ready for detection:", {
-          ctxExists: !!ctx,
           videoReadyState: video.readyState,
         });
         animationFrameId.current = requestAnimationFrame(detect);
         return;
       }
-
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const imageBitmap = await createImageBitmap(imageData);
-      const modelTypes = modelRequirements[currentView] || ["hand"];
-
-      workerRef.current!.postMessage(
-        {
-          type: "detect",
-          data: {
-            imageBitmap,
-            timestamp: now,
-            modelTypes,
+    
+      try {
+        const imageBitmap = await createImageBitmap(video);
+        const modelTypes = modelRequirements[currentView] || ["hand"];
+    
+        workerRef.current!.postMessage(
+          {
+            type: "detect",
+            data: {
+              imageBitmap,
+              timestamp: now,
+              modelTypes,
+            },
           },
-        },
-        [imageBitmap]
-      );
-
+          [imageBitmap] // chuyển quyền ownership cực nhanh
+        );
+      } catch (err) {
+        console.error("[WebcamProvider] Error creating bitmap:", err);
+      }
+    
       animationFrameId.current = requestAnimationFrame(detect);
-    };
+    };    
 
     detect();
 

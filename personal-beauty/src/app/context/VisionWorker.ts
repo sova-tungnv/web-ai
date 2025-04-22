@@ -76,18 +76,28 @@ self.onmessage = async (e: MessageEvent) => {
 
   if (type === "detect") {
     const { imageData, timestamp, modelTypes } = data;
-
+    // Ghi lại thời gian nhận dữ liệu từ WebcamContext
+    const receiveTime = performance.now();
+    console.log(`[VisionWorker] Received imageData at: ${receiveTime}ms, timestamp: ${timestamp}`);
     try {
-      const imageBitmap = await createImageBitmap(imageData);
-      const results: { [key: string]: any } = {};
 
+      const startBitmapTime = performance.now();
+      const imageBitmap = await createImageBitmap(imageData);
+      console.log(`[VisionWorker] Created ImageBitmap in: ${(performance.now() - startBitmapTime).toFixed(2)}ms`);
+
+      const results: { [key: string]: any } = {};
+      const startDetectionTime = performance.now();
       for (const modelType of modelTypes) {
         if (models[modelType]) {
           results[modelType] = await models[modelType].detectForVideo(imageBitmap, timestamp);
           //console.log(`[VisionWorker] Detection result for ${modelType}:`, results[modelType]);
         }
       }
+      console.log(`[VisionWorker] Detection took: ${(performance.now() - startDetectionTime).toFixed(2)}ms`);
 
+      // Ghi lại thời gian hoàn thành xử lý và gửi kết quả
+      const sendTime = performance.now();
+      console.log(`[VisionWorker] Sending detection results at: ${sendTime}ms, processing time: ${(sendTime - receiveTime).toFixed(2)}ms`);
       self.postMessage({ type: "detectionResult", results });
       imageBitmap.close();
     } catch (err) {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/pages/PersonalColor.tsx
 "use client";
 
@@ -15,14 +16,9 @@ export default function HairColor() {
     const {
         stream,
         error: webcamError,
-        restartStream,
-        handData,
-        setIsHandDetectionEnabled,
     } = useWebcam();
     const { setIsLoading } = useLoading();
-    const { registerElement, unregisterElement } = useHandControl();
     const [error, setError] = useState<string | null>(null);
-    const [isFaceLandmarkerReady, setIsFaceLandmarkerReady] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const displayVideoRef = useRef<HTMLVideoElement>(null);
@@ -31,7 +27,7 @@ export default function HairColor() {
     const [imageSegmenter, setImageSegmenter] = useState<ImageSegmenter | null>(null);
     const prevAvgColorRef = useRef<{ r: number; g: number; b: number } | null>(null);
     const [selectedHairColor, setSelectedHairColor] = useState<number[] | null>(null);
-
+    const lastDetectTime = useRef(0);
 
     const hairColorList = [
       { name: "Đen tuyền", rgb: [10, 10, 10] },
@@ -159,6 +155,13 @@ export default function HairColor() {
 
         const detectHair = async () => {
             try {
+                const now = performance.now();
+                if (now - lastDetectTime.current < 100) { // 10 FPS
+                    animationFrameId.current = requestAnimationFrame(detectHair);
+                    return;
+                }
+
+                lastDetectTime.current = now;
                 // Lấy kết quả phân đoạn từ video
                 const result: ImageSegmenterResult = await imageSegmenter.segmentForVideo(
                     video,
@@ -306,7 +309,7 @@ export default function HairColor() {
                 </div>
             </div>
 
-          <div className="md:w-1/3 bg-white p-4 md:p-6 rounded-xl shadow-md flex flex-col">
+          <div className="md:w-1/3 bg-white p-4 md:p-6 rounded-xl shadow-md flex flex-col max-h-[calc(100vh-64px)] overflow-hidden">
               <div className="mb-4">
             <h5 className="text-2xl md:text-3xl font-bold text-pink-600">
                 Hair Color
@@ -340,7 +343,7 @@ export default function HairColor() {
               <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-4">
             Choose a Hair Color
               </h2>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 flex-1 overflow-y-auto">
             {hairColorList.map((color) => (
                 <button
               key={color.name}

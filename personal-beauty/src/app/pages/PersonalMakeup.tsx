@@ -60,7 +60,7 @@ export default function PersonalColor() {
                             delegate: "GPU",
                         },
                         outputFaceBlendshapes: true,
-                        runningMode: "IMAGE",
+                        runningMode: "VIDEO",
                         numFaces: 1,
                     }
                 );
@@ -318,17 +318,15 @@ export default function PersonalColor() {
 
             try {
                 const now = performance.now();
-                if (now - lastDetectTime.current < 100) { // 10 FPS
+                if (now - lastDetectTime.current < 120) { // 10 FPS
                     animationFrameId.current = requestAnimationFrame(detect);
                     return;
                 }
 
                 lastDetectTime.current = now;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const imageBitmap = await createImageBitmap(imageData);
-                const results =  faceLandmarkerRef.current.detect(imageBitmap);
-
+                // ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                // const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const results =  faceLandmarkerRef.current.detectForVideo(video, now);
                 if (results.faceLandmarks && results.faceLandmarks.length > 0) {
                     const landmarks = results.faceLandmarks[0];
                     const features = analyzeFacialFeatures(landmarks);
@@ -356,7 +354,7 @@ export default function PersonalColor() {
     
                     ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-                    if (isApplyMakeupRef.current)
+                    if (isApplyMakeupRef.current) {
                         isApplyMakeupRef.current = false;
                         drawMakeup(
                             ctx,
@@ -364,6 +362,7 @@ export default function PersonalColor() {
                             video.videoWidth,
                             video.videoHeight
                         );
+                    }
 
                     setStatusMessage("ok");
 

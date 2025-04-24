@@ -154,8 +154,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 640 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 10, max: 10 }
+          height: { ideal: 480 }
         },
       });
       setStream(mediaStream);
@@ -329,7 +328,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const video = videoRef.current;
     const detect = async () => {
       const now = performance.now();
-      if (now - lastDetectTime.current < 50) { // 10 FPS
+      if (now - lastDetectTime.current < 500) { // 10 FPS
         animationFrameId.current = requestAnimationFrame(detect);
         return;
       }

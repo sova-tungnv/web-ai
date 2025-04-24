@@ -167,7 +167,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [stream]);
 
   useEffect(() => {
-    workerRef.current = new Worker(new URL("./VisionWorker.ts", import.meta.url));
+    workerRef.current = new Worker(new URL("../worker/VisionWorker.ts", import.meta.url));
     workerRef.current.onmessage = (e: MessageEvent) => {
       const { type, results } = e.data;
 

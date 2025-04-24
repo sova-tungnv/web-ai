@@ -261,9 +261,10 @@ export default function PersonalColor() {
         const draw = async () => {
             try {
                 const now = performance.now();
-                if (now - lastDetectTime.current < 33) { // 10 FPS
-                    animationFrameId.current = requestAnimationFrame(draw);
-                    return;
+                const minInterval = detectionResults.face?.faceLandmarks?.length > 0 ? 33 : 100;
+                if (now - lastDetectTime.current < minInterval) {
+                  animationFrameId.current = requestAnimationFrame(draw);
+                  return;
                 }
                 lastDetectTime.current = now;
 

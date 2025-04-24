@@ -127,30 +127,37 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     const detect = () => {
       const currentHandData = handDataRef.current;
       const now = performance.now();
-      if (now - lastDetectTime.current < 33) {
+
+      // Điều chỉnh FPS dựa trên trạng thái phát hiện tay
+      const minInterval = currentHandData.isHandDetected ? 33 : 100; // 60fps khi có tay, 10fps khi không
+      if (now - lastDetectTime.current < minInterval) {
         animationFrameId.current = requestAnimationFrame(detect);
         return;
       }
       lastDetectTime.current = now;
 
-      if (!currentHandData.isHandDetected && now - lastHandDetectedTime.current > 5000) {
-        return;
-      }
+      // if (!currentHandData.isHandDetected && now - lastHandDetectedTime.current > 5000) {
+      //   return;
+      // }
 
+      // Chỉ xử lý khi có element và hand detection enabled
       if (elements.current.size > 0 && isHandDetectionEnabled) {
-        const hasHandDataChanged =
+        // Tối ưu: chỉ kiểm tra khi có thay đổi
+        const hasChanged = (
           lastHandData.current.isHandDetected !== currentHandData.isHandDetected ||
           lastHandData.current.cursorPosition.x !== currentHandData.cursorPosition.x ||
-          lastHandData.current.cursorPosition.y !== currentHandData.cursorPosition.y;
+          lastHandData.current.cursorPosition.y !== currentHandData.cursorPosition.y
+        );
 
-        const isFistChanged = lastHandData.current.isFist !== currentHandData.isFist;
-
-        if (hasHandDataChanged && !currentHandData.isFist) {
-          elements.current.forEach(onHover);
-        }
-
-        if (isFistChanged && currentHandData.isFist) {
-          elements.current.forEach(onClick);
+        if (hasChanged) {
+          if (currentHandData.isFist) {
+            onClick();
+          } else if (currentHandData.isHandDetected) {
+            onHover();
+          } else {
+            // Clear state khi không phát hiện tay
+            elements.current.forEach(el => el.classList.remove("hover"));
+          }
         }
 
         lastHandData.current = { ...currentHandData };

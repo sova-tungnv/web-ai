@@ -3,7 +3,9 @@
 
 import { HandLandmarker, FaceLandmarker, PoseLandmarker, FilesetResolver, ImageSegmenter } from "@mediapipe/tasks-vision";
 
-const models: { [key: string]: any } = {};
+// Sử dụng Map thay vì Object để quản lý models
+const models = new Map<string, any>();
+
 const modelConfigs: { [key: string]: any } = {
   hand: {
     class: HandLandmarker,
@@ -14,7 +16,6 @@ const modelConfigs: { [key: string]: any } = {
       },
       runningMode: "VIDEO",
       numHands: 1,
-      //minHandDetectionConfidence: 0.2, // Giảm xuống 0.2 để tăng độ nhạy
     },
   },
   face: {
@@ -33,13 +34,12 @@ const modelConfigs: { [key: string]: any } = {
     class: ImageSegmenter,
     options: {
       baseOptions: {
-          modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/image_segmenter/hair_segmenter/float32/1/hair_segmenter.tflite",
-          delegate: "GPU"
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/image_segmenter/hair_segmenter/float32/1/hair_segmenter.tflite",
+        delegate: "GPU",
       },
       runningMode: "VIDEO",
       outputCategoryMask: true,
-      outputConfidenceMasks: false
     },
   },
   pose: {
@@ -56,41 +56,33 @@ const modelConfigs: { [key: string]: any } = {
 };
 
 let filesetResolver: any = null;
-let frameCounter = 0;
 let isDetecting = false;
 const frameQueue: any = [];
 
 const handleDetect = async () => {
-  if(frameQueue.length > 0){
+  if (frameQueue.length > 0) {
     const { imageBitmap, timestamp, modelTypes } = frameQueue.shift()!;
     isDetecting = true;
-    frameQueue.shift()!;
-    
-    // Ghi lại thời gian nhận dữ liệu từ WebcamContext
-    // const receiveTime = performance.now();
-   // console.log(`[VisionWorker] Received imageData at: ${receiveTime}ms, timestamp: ${timestamp}`);
+
     try {
-      frameCounter++;
-      //const imageBitmap = await createImageBitmap(imageData);
       const results: { [key: string]: any } = {};
-      //const startDetectionTime = performance.now();
-      for (const modelType of modelTypes) {
-        if (models[modelType]) {
-  
-          if (modelType !== "hand" && frameCounter % 3 !== 0) {
-            results[modelType] = await models[modelType].detectForVideo(imageBitmap, timestamp);
-          } else {
-            results[modelType] = await models[modelType].detectForVideo(imageBitmap, timestamp);
+
+      // Giải quyết các mô hình song song
+      const detectionPromises = modelTypes.map(async (modelType) => {
+        if (models.has(modelType)) {
+          try {
+            // Chạy mô hình và lưu kết quả
+            results[modelType] = await models.get(modelType).detectForVideo(imageBitmap, timestamp);
+          } catch (err) {
+            console.error(`[VisionWorker] Error processing model: ${modelType}`, err);
           }
-          //console.log(`[VisionWorker] Detection result for ${modelType}:`, results[modelType]);
         }
-      }
-      //console.log(`[VisionWorker] Detection took: ${(performance.now() - startDetectionTime).toFixed(2)}ms`);
-  
-      // Ghi lại thời gian hoàn thành xử lý và gửi kết quả
-      // const sendTime = performance.now();
-      // console.log(`[VisionWorker] Sending detection results at: ${sendTime}ms, processing time: ${(sendTime - receiveTime).toFixed(2)}ms`);
-      //await Promise.all(promises);
+      });
+
+      // Đợi tất cả mô hình xử lý song song xong
+      await Promise.all(detectionPromises);
+
+      // Gửi kết quả về main thread
       self.postMessage({ type: "detectionResult", results });
       imageBitmap.close();
     } catch (err) {
@@ -98,11 +90,10 @@ const handleDetect = async () => {
       console.log("[VisionWorker] Detection error:", (err as Error).message);
     } finally {
       isDetecting = false;
-      handleDetect();
+      handleDetect(); // Gọi lại nếu cần thiết
     }
   }
-
-}
+};
 
 self.onmessage = async (e: MessageEvent) => {
   const { type, data } = e.data;
@@ -119,13 +110,11 @@ self.onmessage = async (e: MessageEvent) => {
         filesetResolver = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
         );
-        //console.log("[VisionWorker] FilesetResolver initialized");
       }
 
-      if (!models[modelType]) {
+      if (!models.has(modelType)) {
         const { class: ModelClass, options } = modelConfigs[modelType];
-        models[modelType] = await ModelClass.createFromOptions(filesetResolver, options);
-        //console.log(`[VisionWorker] Model ${modelType} created successfully`);
+        models.set(modelType, await ModelClass.createFromOptions(filesetResolver, options));
       }
 
       self.postMessage({ type: "initialized", success: true, modelType });
@@ -140,7 +129,7 @@ self.onmessage = async (e: MessageEvent) => {
     if (frameQueue.length < 2) {
       frameQueue.push({ imageBitmap, timestamp, modelTypes });
     } else {
-      // If queue is full, replace oldest frame with newest
+      // Nếu queue đầy, thay thế frame cũ bằng frame mới
       const oldestFrame = frameQueue.shift();
       if (oldestFrame?.imageBitmap) {
         oldestFrame.imageBitmap.close();
@@ -155,16 +144,16 @@ self.onmessage = async (e: MessageEvent) => {
 
   if (type === "cleanup") {
     const { modelType } = data;
-    if (modelType && models[modelType]) {
-      models[modelType].close();
-      delete models[modelType];
+    if (modelType && models.has(modelType)) {
+      models.get(modelType).close();
+      models.delete(modelType);
       self.postMessage({ type: "cleaned", success: true, modelType });
       console.log(`[VisionWorker] Cleaned up model ${modelType}`);
     } else if (!modelType) {
-      Object.keys(models).forEach((key) => {
-        models[key].close();
-        delete models[key];
+      models.forEach((model) => {
+        model.close();
       });
+      models.clear();
       self.postMessage({ type: "cleaned", success: true });
       console.log("[VisionWorker] Cleaned up all models");
     }

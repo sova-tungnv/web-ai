@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/pages/PersonalColor.tsx
 "use client";
 
@@ -42,7 +43,8 @@ export default function PersonalColor() {
     const displayVideoRef = useRef<HTMLVideoElement>(null);
     const animationFrameId = useRef<number | null>(null);
     const [makeupSuggestion, setMakeupSuggestion] = useState<any | null>(null);
-    const [isApplyMakeup, setIsApplyMakeup] = useState(false);
+    const isApplyMakeupRef = useRef(true); 
+    const lastDetectTime = useRef(0);
 
     useEffect(() => {
         const initializeFaceLandmarker = async () => {
@@ -65,7 +67,6 @@ export default function PersonalColor() {
 
                 faceLandmarkerRef.current = faceLandmarker;
                 setIsFaceLandmarkerReady(true);
-                console.log("[PersonalColor] FaceLandmarker initialized");
             } catch (err) {
                 console.error(
                     "[PersonalColor] Error initializing FaceLandmarker:",
@@ -92,7 +93,6 @@ export default function PersonalColor() {
     function analyzeFacialFeatures(
         landmarks: NormalizedLandmark[]
     ): FacialFeatures {
-        const dist = (a: number, b: number) => Math.abs(a - b);
         const euclidean = (a: any, b: any) =>
             Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
 
@@ -261,10 +261,6 @@ export default function PersonalColor() {
                     displayVideoRef.current.readyState >= 4
                 ) {
                     setIsVideoReady(true);
-                    console.log(
-                        "[PersonalColor] Display video ready, readyState:",
-                        displayVideoRef.current.readyState
-                    );
                     setIsLoading(false); // Tắt loading qua context
                 } else {
                     setTimeout(checkVideoReady, 500);
@@ -283,18 +279,11 @@ export default function PersonalColor() {
             !displayVideoRef.current ||
             !isFaceDetectionActive
         ) {
-            console.log(
-                "[PersonalColor] Waiting for FaceLandmarker or webcam...",
-                isFaceLandmarkerReady,
-                stream,
-                canvasRef.current,
-                displayVideoRef.current
-            );
             return;
         }
         const video = displayVideoRef.current;
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
         if (!ctx) {
             setError("Failed to initialize canvas.");
             return;
@@ -303,12 +292,6 @@ export default function PersonalColor() {
         const waitForVideoReady = async () => {
             let retries = 5;
             while (retries > 0 && video.readyState < 4) {
-                console.log(
-                    "[PersonalColor] Video not ready, waiting... readyState:",
-                    video.readyState,
-                    "retries left:",
-                    retries
-                );
                 await new Promise((resolve) => setTimeout(resolve, 2000));
                 retries--;
                 if (video.readyState < 4) {
@@ -334,11 +317,16 @@ export default function PersonalColor() {
             }
 
             try {
-                const results = await faceLandmarkerRef.current.detectForVideo(
-                    video,
-                    performance.now()
-                );
+                const now = performance.now();
+                if (now - lastDetectTime.current < 120) { // 10 FPS
+                    animationFrameId.current = requestAnimationFrame(detect);
+                    return;
+                }
 
+                lastDetectTime.current = now;
+                // ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                // const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const results =  faceLandmarkerRef.current.detectForVideo(video, now);
                 if (results.faceLandmarks && results.faceLandmarks.length > 0) {
                     const landmarks = results.faceLandmarks[0];
                     const features = analyzeFacialFeatures(landmarks);
@@ -365,66 +353,16 @@ export default function PersonalColor() {
                     }
     
                     ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
-                    // const drawingUtils = new DrawingUtils(ctx);
-                    // for (const landmarks of results.faceLandmarks) {
-                    //     drawingUtils.drawConnectors(
-                    //         landmarks,
-                    //         FaceLandmarker.FACE_LANDMARKS_TESSELATION,
-                    //         { color: "#C0C0C070", lineWidth: 1 }
-                    //     );
-                    //     drawingUtils.drawConnectors(
-                    //         landmarks,
-                    //         FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
-                    //         { color: "#FF3030" }
-                    //     );
-                    //     drawingUtils.drawConnectors(
-                    //         landmarks,
-                    //         FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW,
-                    //         { color: "#FF3030" }
-                    //     );
-                    //     drawingUtils.drawConnectors(
-                    //         landmarks,
-                    //         FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
-                    //         { color: "#30FF30" }
-                    //     );
-                    //     drawingUtils.drawConnectors(
-                    //         landmarks,
-                    //         FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,
-                    //         { color: "#30FF30" }
-                    //     );
-                    //     drawingUtils.drawConnectors(
-                    //         landmarks,
-                    //         FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,
-                    //         { color: "#E0E0E0" }
-                    //     );
-                    //     drawingUtils.drawConnectors(
-                    //         landmarks,
-                    //         FaceLandmarker.FACE_LANDMARKS_LIPS,
-                    //         { color: "#E0E0E0" }
-                    //     );
-                    //     drawingUtils.drawConnectors(
-                    //         landmarks,
-                    //         FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
-                    //         { color: "#FF3030" }
-                    //     );
-                    //     drawingUtils.drawConnectors(
-                    //         landmarks,
-                    //         FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,
-                    //         { color: "#30FF30" }
-                    //     );
-                    // }
 
-                    detectBlinkWithinTime(landmarks);
-
-                    console.log(isApplyMakeup);
-
-                    if (isApplyMakeup)
+                    if (isApplyMakeupRef.current) {
+                        isApplyMakeupRef.current = false;
                         drawMakeup(
                             ctx,
                             landmarks,
                             video.videoWidth,
                             video.videoHeight
                         );
+                    }
 
                     setStatusMessage("ok");
 
@@ -667,50 +605,7 @@ export default function PersonalColor() {
         ctx.fillStyle = "rgba(197, 175, 163, 0.15)";
         ctx.fill();
         ctx.restore();
-    }
-
-    let blinkTimestamps: number[] = [];
-    let isEyeClosed = false;
-
-    function getEAR(
-        top: NormalizedLandmark,
-        bottom: NormalizedLandmark
-    ): number {
-        const dy = top.y - bottom.y;
-        const dx = top.x - bottom.x;
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    function detectBlinkWithinTime(landmarks: NormalizedLandmark[]) {
-        const top = landmarks[159]; // mí trên trái
-        const bottom = landmarks[145]; // mí dưới trái
-
-        const ear = getEAR(top, bottom);
-        const threshold = 0.015;
-        const currentTime = Date.now();
-
-        if (ear < threshold && !isEyeClosed) {
-            isEyeClosed = true;
-        }
-
-        if (ear >= threshold && isEyeClosed) {
-            isEyeClosed = false;
-            blinkTimestamps.push(currentTime);
-
-            // Lọc các nháy mắt trong 5 giây gần nhất
-            const recentBlinks = blinkTimestamps.filter(
-                (t) => currentTime - t <= 5000
-            );
-
-            console.log(recentBlinks);
-            if (recentBlinks.length >= 1) {
-                console.log("✅ Nháy mắt 3 lần trong 5 giây!");
-                blinkTimestamps = []; // reset nếu muốn
-                setIsApplyMakeup(!isApplyMakeup);
-            } else {
-                blinkTimestamps = recentBlinks; // giữ lại các nháy hợp lệ
-            }
-        }
+        isApplyMakeupRef.current = true;
     }
 
     return (

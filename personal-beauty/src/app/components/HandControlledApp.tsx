@@ -1,8 +1,6 @@
-// src/context/HandControlledApp.tsx
-
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Sidebar from "./Sidebar";
 import { useWebcam } from "../context/WebcamContext";
 import { ViewType, VIEWS } from "../constants/views";
@@ -11,7 +9,7 @@ import { useLoading } from "../context/LoadingContext";
 import { HandControlProvider } from "../context/HandControlContext";
 
 interface HandControlledAppProps {
-  children: React.ReactNode;
+  children: (view: ViewType) => React.ReactNode;
   onMenuSelect: (view: ViewType) => void;
 }
 
@@ -20,19 +18,19 @@ export default function HandControlledApp({ children, onMenuSelect }: HandContro
   const { isLoading, setIsLoading } = useLoading();
   const [currentView, setCurrentView] = useState<ViewType>(VIEWS.HOME);
 
-  const handleMenuSelect = (view: ViewType) => {
+  const handleMenuSelect = useCallback((view: ViewType) => {
     setIsLoading(true);
     onMenuSelect(view);
     console.log(`[HandControlledApp] Menu selected: ${view}`);
     setCurrentView(view);
-  };
+  }, [onMenuSelect, setIsLoading]);
 
-  const handleOpenHand = () => {
+  const handleOpenHand = useCallback(() => {
     if (currentView !== VIEWS.HOME) {
       onMenuSelect(VIEWS.HOME);
       setCurrentView(VIEWS.HOME);
     }
-  };
+  }, [currentView, onMenuSelect]);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-r from-pink-100 to-purple-100 overflow-hidden">
@@ -43,7 +41,9 @@ export default function HandControlledApp({ children, onMenuSelect }: HandContro
       )}
       <HandControlProvider handData={handData} onOpenHand={handleOpenHand} isLoading={isLoading}>
         <Sidebar currentView={currentView} onMenuSelect={handleMenuSelect} />
-        <main className="flex-1 p-0 overflow-hidden">{children(currentView)}</main>
+        <main className="flex-1 p-0 overflow-hidden">
+          {children(currentView)}
+        </main>
       </HandControlProvider>
       <LoadingOverlay isLoading={isLoading} />
     </div>

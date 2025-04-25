@@ -373,7 +373,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         currentView,
         detectionResults,
         setCurrentView,
-        cursorRef,
+        cursorRef: cursorRef as any,
       }}
     >
       {children}

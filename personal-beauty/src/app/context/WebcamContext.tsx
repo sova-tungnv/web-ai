@@ -26,7 +26,7 @@ interface WebcamContextType {
   detectionResults: { [key: string]: any };
   currentView: string;
   setCurrentView: (view: any) => void;
-  cursorRef: RefObject<HTMLDivElement>; 
+  cursorRef: RefObject<HTMLDivElement>;
 }
 
 const WebcamContext = createContext<WebcamContextType | undefined>(undefined);
@@ -192,57 +192,86 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     if (!workerRef.current) return;
 
+    // Lấy model requirements cho view hiện tại
     const requiredModels = modelRequirements[currentView] || ["hand"];
-    requiredModels.forEach((modelType) => {
-      workerRef.current!.postMessage({ type: "initialize", data: { modelType } });
+
+    // Nếu đang bật hand detection và phát hiện tay => chỉ chạy hand
+    const modelsToRun = (isHandDetectionEnabled && handData.isHandDetected)
+      ? ["hand"]
+      : requiredModels;
+
+    // Cleanup các model không cần thiết
+    const allModels = ["hand", "face", "pose", "hair"];
+    const unusedModels = allModels.filter(m => !modelsToRun.includes(m));
+
+    unusedModels.forEach(modelType => {
+      workerRef.current!.postMessage({
+        type: "cleanup",
+        data: { modelType }
+      });
     });
 
-    const allModels = ["hand", "face", "pose"];
-    const unusedModels = allModels.filter((model) => !requiredModels.includes(model));
-    unusedModels.forEach((modelType) => {
-      workerRef.current!.postMessage({ type: "cleanup", data: { modelType } });
+    // Khởi tạo các model cần thiết
+    modelsToRun.forEach(modelType => {
+      workerRef.current!.postMessage({
+        type: "initialize",
+        data: { modelType }
+      });
     });
 
-    //console.log("[WebcamProvider] Model requirements updated for view:", currentView, requiredModels);
-  }, [currentView]);
+  }, [currentView, isHandDetectionEnabled, handData.isHandDetected]);
 
-
-  // Luồng phát hiện đầy đủ (full detection) khi isHandDetectionEnabled = true
+  // Luồng phát hiện chính
   useEffect(() => {
-    if (!stream || !videoRef.current || !workerRef.current || !isHandDetectionEnabled) return;
+    if (!stream || !videoRef.current || !workerRef.current) return;
+
     const video = videoRef.current;
     const detect = async () => {
       const now = performance.now();
-      if (now - lastDetectTime.current < 33) {
+
+      // Điều chỉnh FPS: nhanh hơn khi có hand detection
+      const minInterval = (isHandDetectionEnabled && handData.isHandDetected) ? 33 : 100;
+      if (now - lastDetectTime.current < minInterval) {
         animationFrameId.current = requestAnimationFrame(detect);
         return;
       }
+
       lastDetectTime.current = now;
 
       if (video.readyState < 4) {
-        console.log("[WebcamProvider] video not ready, readyState:", video.readyState);
         animationFrameId.current = requestAnimationFrame(detect);
         return;
       }
 
       try {
         const imageBitmap = await createImageBitmap(video);
-        const modelTypes = modelRequirements[currentView] || ["hand"];
+
+        // Xác định modelTypes cần chạy
+        const modelTypes = (isHandDetectionEnabled && handData.isHandDetected)
+          ? ["hand"]
+          : modelRequirements[currentView] || ["hand"];
+
         workerRef.current!.postMessage({
           type: "detect",
-          data: { imageBitmap, timestamp: now, modelTypes },
+          data: {
+            imageBitmap,
+            timestamp: now,
+            modelTypes
+          },
         }, [imageBitmap]);
       } catch (err) {
-        console.error("[WebcamProvider] Error creating bitmap:", err);
+        console.error("Error creating bitmap:", err);
       }
 
       animationFrameId.current = requestAnimationFrame(detect);
     };
+
     detect();
+
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
     };
-  }, [stream, currentView, isHandDetectionEnabled]);
+  }, [stream, currentView, isHandDetectionEnabled, handData.isHandDetected]);
 
   // Luồng phát hiện nhẹ (lightweight detection) để kích hoạt lại khi isHandDetectionEnabled = false
   // useEffect(() => {
@@ -322,7 +351,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         currentView,
         detectionResults,
         setCurrentView,
-        cursorRef, 
+        cursorRef,
       }}
     >
       {children}

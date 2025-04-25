@@ -96,7 +96,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
       }
       lastFistState.current = false;
       isClickPending.current = false;
-    }, 150);
+    }, 200);
   }, [isHandDetectionEnabled]);
 
   const handleHandDetection = useCallback(() => {
@@ -106,7 +106,8 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     const changed =
       lastHandData.current.isHandDetected !== current.isHandDetected ||
       lastHandData.current.cursorPosition.x !== current.cursorPosition.x ||
-      lastHandData.current.cursorPosition.y !== current.cursorPosition.y;
+      lastHandData.current.cursorPosition.y !== current.cursorPosition.y ||
+      lastHandData.current.isFist !== current.isFist;
 
     if (!changed) return;
 

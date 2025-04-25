@@ -105,13 +105,21 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const clampedX = Math.max(0, Math.min(adjustedX, window.innerWidth - 1));
     const clampedY = Math.max(0, Math.min(adjustedY, window.innerHeight - 1));
 
-    const currentPosition = {
-      x: Math.round((ALPHA * clampedX + (1 - ALPHA) * smoothPosition.current.x) * 100) / 100,
-      y: Math.round((ALPHA * clampedY + (1 - ALPHA) * smoothPosition.current.y) * 100) / 100,
-    };
+    let currentPosition: { x: number; y: number };
+
+    if (isFist && lastPositionBeforeFist.current) {
+      // Giữ tọa độ cuối cùng trước khi nắm tay
+      currentPosition = lastPositionBeforeFist.current;
+    } else {
+      // Làm mịn tọa độ khi tay mở
+      currentPosition = {
+        x: Math.round((ALPHA * clampedX + (1 - ALPHA) * smoothPosition.current.x) * 100) / 100,
+        y: Math.round((ALPHA * clampedY + (1 - ALPHA) * smoothPosition.current.y) * 100) / 100,
+      };
+      lastPositionBeforeFist.current = currentPosition; // Lưu tọa độ trước khi nắm tay
+    }
 
     smoothPosition.current = currentPosition;
-    lastPositionBeforeFist.current = null;
 
     //console.log("[detectFull] cursorPosition:", currentPosition);
 

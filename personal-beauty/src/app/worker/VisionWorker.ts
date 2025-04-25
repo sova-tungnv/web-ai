@@ -77,8 +77,8 @@ const handleDetect = async () => {
  
      const shouldRunOthers = !handDetected || (results.hand?.landmarks?.length > 0);
      if (shouldRunOthers) {
-       const otherModels = modelTypes.filter(m => m !== "hand");
-       await Promise.all(otherModels.map(async (modelType) => {
+       const otherModels = modelTypes.filter((m: any) => m !== "hand");
+       await Promise.all(otherModels.map(async (modelType: any) => {
          if (models.has(modelType)) {
            results[modelType] = await models.get(modelType).detectForVideo(imageBitmap, timestamp);
          }
@@ -86,7 +86,7 @@ const handleDetect = async () => {
      }
  
     self.postMessage({ type: "detectionResult", results });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Detection error:", err);
     self.postMessage({ type: "detectionError", error: err.message });
   } finally {

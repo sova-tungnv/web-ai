@@ -58,7 +58,7 @@ const SelectionButton = React.memo(
         return (
             <button
                 ref={buttonRef}
-                className={`area-button text-2xl font-semibold px-8 py-4 rounded-xl transition-all duration-300 transform shadow-lg ${selectedArea === area
+                className={`area-button text-2xl min-h-[123px] font-semibold px-8 py-4 rounded-xl transition-all duration-300 transform shadow-lg ${selectedArea === area
                     ? "bg-pink-600 text-white scale-105 border-4 border-pink-300"
                     : "bg-gray-200 text-gray-800 hover:bg-gray-300 hover:scale-105"
                     }`}
@@ -118,7 +118,7 @@ export default function PersonalColor() {
 
     const selectionButtons = useMemo(
         () => (
-            <div className="flex gap-6">
+            <div className="flex flex-col gap-6">
                 {areas.map((area) => (
                     <SelectionButton key={area} area={area} selectedArea={selectedArea} setSelectedArea={setSelectedArea} />
                 ))}

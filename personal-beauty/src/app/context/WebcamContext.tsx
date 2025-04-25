@@ -506,7 +506,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Luồng phát hiện khuôn mặt (tốc độ thấp hơn)
   useEffect(() => {
-    const currentModelRequirements = modelRequirements[currentView] || [];
+    const currentModelRequirements = modelRequirements[String(currentView) as ViewType] || [];
     // Chỉ chạy face detection nếu cần
     if (!stream || !videoRef.current || !faceWorkerRef.current || 
         !isFaceWorkerInitialized || !currentModelRequirements.includes("face")) {
@@ -600,7 +600,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   ]);
 
   return (
-    <WebcamContext.Provider value={contextValue}>
+    <WebcamContext.Provider value={contextValue as any}>
       {children}
       <video 
         ref={videoRef} 

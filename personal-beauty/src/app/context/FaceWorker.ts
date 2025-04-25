@@ -203,7 +203,7 @@ self.onmessage = async (e: MessageEvent) => {
       if (!isInitializing) {
         // Tự động khởi tạo nếu chưa
         self.postMessage({ type: "autoInitializing" });
-        self.onmessage(new MessageEvent("message", { 
+        self?.onmessage?.(new MessageEvent("message", { 
           data: { type: "initialize" } 
         }));
       }

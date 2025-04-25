@@ -1,11 +1,11 @@
 // src/constants/views.ts
 export const VIEWS = {
-    HOME: "home",
-    PERSONAL_COLOR: "personal-color",
-    PERSONAL_MAKEUP: "personal-makeup",
-    COSMETIC_SURGERY: "cosmetic-surgery",
-    HAIR_COLOR: "hair-color",
-    PERSONAL_BODY_TYPE: "personal-body-type",
+    HOME: "HOME",
+    PERSONAL_COLOR: "PERSONAL_COLOR",
+    PERSONAL_MAKEUP: "PERSONAL_MAKEUP",
+    COSMETIC_SURGERY: "COSMETIC_SURGERY",
+    HAIR_COLOR: "HAIR_COLOR",
+    PERSONAL_BODY_TYPE: "PERSONAL_BODY_TYPE",
   } as const;
   
   export type ViewType = keyof typeof VIEWS;

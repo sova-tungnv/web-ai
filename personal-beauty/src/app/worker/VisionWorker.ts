@@ -61,47 +61,38 @@ const frameQueue: any = [];
 
 // Thêm logic xử lý ưu tiên
 const handleDetect = async () => {
-  if (frameQueue.length > 0) {
-    const { imageBitmap, timestamp, modelTypes } = frameQueue.shift()!;
-    isDetecting = true;
+  if (isDetecting || frameQueue.length === 0) return;
+  const { imageBitmap, timestamp, modelTypes } = frameQueue.shift()!;
+  isDetecting = true;
 
-    try {
-      const results: { [key: string]: any } = {};
-      
-      // Ưu tiên hand detection nếu có
-      if (modelTypes.includes("hand") && models.has("hand")) {
-        results.hand = await models.get("hand").detectForVideo(imageBitmap, timestamp);
-        
-        // Nếu phát hiện tay, chỉ xử lý thêm nếu view yêu cầu
-        if (results.hand?.landmarks?.length > 0) {
-          const otherModels = modelTypes.filter(type => type !== "hand");
-          if (otherModels.length > 0) {
-            await Promise.all(otherModels.map(async (modelType) => {
-              if (models.has(modelType)) {
-                results[modelType] = await models.get(modelType).detectForVideo(imageBitmap, timestamp);
-              }
-            }));
-          }
-        }
-      } 
-      // Nếu không có hand hoặc không phát hiện tay
-      else {
-        await Promise.all(modelTypes.map(async (modelType) => {
-          if (models.has(modelType)) {
-            results[modelType] = await models.get(modelType).detectForVideo(imageBitmap, timestamp);
-          }
-        }));
-      }
+  try {
+    const results: { [key: string]: any } = {};
 
-      self.postMessage({ type: "detectionResult", results });
-      imageBitmap.close();
-    } catch (err) {
-      console.error("Detection error:", err);
-      self.postMessage({ type: "detectionError", error: err.message });
-    } finally {
-      isDetecting = false;
-      if (frameQueue.length > 0) handleDetect();
-    }
+    // Ưu tiên hand detection nếu có
+     // Always prioritize hand detection
+     const handDetected = modelTypes.includes("hand") && models.has("hand");
+     if (handDetected) {
+       results.hand = await models.get("hand").detectForVideo(imageBitmap, timestamp);
+     }
+ 
+     const shouldRunOthers = !handDetected || (results.hand?.landmarks?.length > 0);
+     if (shouldRunOthers) {
+       const otherModels = modelTypes.filter(m => m !== "hand");
+       await Promise.all(otherModels.map(async (modelType) => {
+         if (models.has(modelType)) {
+           results[modelType] = await models.get(modelType).detectForVideo(imageBitmap, timestamp);
+         }
+       }));
+     }
+ 
+    self.postMessage({ type: "detectionResult", results });
+  } catch (err) {
+    console.error("Detection error:", err);
+    self.postMessage({ type: "detectionError", error: err.message });
+  } finally {
+    imageBitmap.close();
+    isDetecting = false;
+    setTimeout(() => handleDetect(), 0);
   }
 };
 
@@ -136,20 +127,12 @@ self.onmessage = async (e: MessageEvent) => {
 
   if (type === "detect") {
     const { imageBitmap, timestamp, modelTypes } = data;
-    if (frameQueue.length < 2) {
-      frameQueue.push({ imageBitmap, timestamp, modelTypes });
-    } else {
-      // Nếu queue đầy, thay thế frame cũ bằng frame mới
-      const oldestFrame = frameQueue.shift();
-      if (oldestFrame?.imageBitmap) {
-        oldestFrame.imageBitmap.close();
-      }
-      frameQueue.push({ imageBitmap, timestamp, modelTypes });
+    if (frameQueue.length >= 2) {
+      const dropped = frameQueue.shift();
+      dropped?.imageBitmap?.close();
     }
-
-    if (frameQueue.length === 0 || isDetecting) return;
+    frameQueue.push({ imageBitmap, timestamp, modelTypes });
     handleDetect();
-    return;
   }
 
   if (type === "cleanup") {
@@ -158,14 +141,10 @@ self.onmessage = async (e: MessageEvent) => {
       models.get(modelType).close();
       models.delete(modelType);
       self.postMessage({ type: "cleaned", success: true, modelType });
-      console.log(`[VisionWorker] Cleaned up model ${modelType}`);
     } else if (!modelType) {
-      models.forEach((model) => {
-        model.close();
-      });
+      models.forEach((model) => model.close());
       models.clear();
       self.postMessage({ type: "cleaned", success: true });
-      console.log("[VisionWorker] Cleaned up all models");
     }
   }
 };

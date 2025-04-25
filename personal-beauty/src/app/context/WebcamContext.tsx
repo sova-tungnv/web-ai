@@ -51,7 +51,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const lastPositionBeforeFist = useRef<{ x: number; y: number } | null>(null);
   const smoothPosition = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const cursorRef = useRef<HTMLDivElement>(null);
-  const ALPHA = 0.6;
+  const ALPHA = 0.3;
   const [handData, setHandData] = useState<HandData>({
     isHandDetected: false,
     cursorPosition: { x: 0, y: 0 },
@@ -113,7 +113,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     smoothPosition.current = currentPosition;
     lastPositionBeforeFist.current = null;
 
-    console.log("[detectFull] cursorPosition:", currentPosition);
+    //console.log("[detectFull] cursorPosition:", currentPosition);
 
     return {
       isHandDetected: true,

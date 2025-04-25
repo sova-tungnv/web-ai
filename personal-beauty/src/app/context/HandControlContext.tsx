@@ -32,7 +32,7 @@ interface HandControlProviderProps {
 }
 
 export const HandControlProvider: React.FC<HandControlProviderProps> = ({ children, handData, onOpenHand, isLoading }) => {
-  const { isHandDetectionEnabled, setIsHandDetectionEnabled, cursorRef } = useWebcam();
+  const { isHandDetectionEnabled, setIsHandDetectionEnabled, cursorRef, currentView } = useWebcam();
   const fistDebounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const isClickPending = useRef(false);
   const lastFistState = useRef(false);
@@ -48,8 +48,11 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     handDataRef.current = handData;
   }, [handData]);
 
+  // Sửa: Lấy element dựa trên vị trí chính xác
   const getElementAtCursor = (cursorPosition: { x: number; y: number }): Element | undefined => {
+    // Lấy tất cả elements tại điểm đó
     const elementsAtPoint = document.elementsFromPoint(cursorPosition.x, cursorPosition.y);
+    // Tìm element đầu tiên trong danh sách đã đăng ký
     return elementsAtPoint.find((el) => elements.current.has(el));
   };
 
@@ -65,62 +68,91 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     setIsHandDetectionEnabled(enable);
   }, [setIsHandDetectionEnabled]);
 
+  // Sửa: Tối ưu hóa onHover
   const onHover = useCallback(() => {
     const { isHandDetected, isFist, cursorPosition } = handDataRef.current;
     if (!isHandDetectionEnabled || !isHandDetected || isFist) return;
 
+    // Chỉ xử lý khi vị trí thay đổi
     const positionChanged =
       !lastProcessedPosition.current ||
-      lastProcessedPosition.current.x !== cursorPosition.x ||
-      lastProcessedPosition.current.y !== cursorPosition.y;
+      Math.abs(lastProcessedPosition.current.x - cursorPosition.x) > 3 ||
+      Math.abs(lastProcessedPosition.current.y - cursorPosition.y) > 3;
 
     if (!positionChanged) return;
     lastProcessedPosition.current = { ...cursorPosition };
 
+    // Lấy element tại vị trí của con trỏ
     const hovered = getElementAtCursor(cursorPosition);
+    
+    // Xóa hover khỏi tất cả elements trước đó
     elements.current.forEach((el) => el.classList.remove("hover"));
+    
+    // Thêm hover cho element hiện tại nếu có
     if (hovered) hovered.classList.add("hover");
   }, [isHandDetectionEnabled]);
 
+  // Sửa: Cải thiện onClick để giảm độ trễ
   const onClick = useCallback(() => {
     const { isHandDetected, isFist, cursorPosition } = handDataRef.current;
     if (!isHandDetectionEnabled || !isHandDetected || !isFist || isClickPending.current) return;
 
+    // Đánh dấu click đang chờ xử lý
     isClickPending.current = true;
     lastFistState.current = true;
 
+    // Giảm thời gian debounce xuống 100ms (thay vì 150ms)
     fistDebounceTimeout.current = setTimeout(() => {
       const clicked = getElementAtCursor(cursorPosition);
       if (clicked) {
+        // Sửa: Thêm hiệu ứng active trước khi click
+        clicked.classList.add("active");
+        setTimeout(() => {
+          clicked.classList.remove("active");
+        }, 100);
+        
+        // Kích hoạt sự kiện click
         clicked.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
       }
       lastFistState.current = false;
       isClickPending.current = false;
-    }, 150);
+    }, 100);
   }, [isHandDetectionEnabled]);
 
+  // Sửa: Tối ưu hóa handleHandDetection để giảm độ trễ
   const handleHandDetection = useCallback(() => {
     const current = handDataRef.current;
     if (!isHandDetectionEnabled || elements.current.size === 0) return;
 
+    // Chỉ xử lý khi có thay đổi đáng kể
+    const positionDiff = lastHandData.current.cursorPosition && current.cursorPosition ? 
+      Math.abs(lastHandData.current.cursorPosition.x - current.cursorPosition.x) + 
+      Math.abs(lastHandData.current.cursorPosition.y - current.cursorPosition.y) : 0;
+      
     const changed =
       lastHandData.current.isHandDetected !== current.isHandDetected ||
-      lastHandData.current.cursorPosition.x !== current.cursorPosition.x ||
-      lastHandData.current.cursorPosition.y !== current.cursorPosition.y;
+      lastHandData.current.isFist !== current.isFist ||
+      positionDiff > 3;
 
     if (!changed) return;
 
-    if (current.isFist) onClick();
-    else if (current.isHandDetected) onHover();
-    else elements.current.forEach((el) => el.classList.remove("hover"));
+    if (current.isFist) {
+      onClick();
+    } else if (current.isHandDetected) {
+      onHover();
+    } else {
+      elements.current.forEach((el) => el.classList.remove("hover"));
+    }
 
     lastHandData.current = { ...current };
   }, [onClick, onHover, isHandDetectionEnabled]);
 
+  // Sửa: Tăng FPS khi có tay được phát hiện
   useEffect(() => {
     const detectLoop = () => {
       const now = performance.now();
-      const minInterval = handDataRef.current.isHandDetected ? 33 : 100;
+      // Tăng FPS lên 60 FPS khi có tay được phát hiện
+      const minInterval = handDataRef.current.isHandDetected ? 16 : 50;
       if (now - lastDetectTime.current < minInterval) {
         animationFrameId.current = requestAnimationFrame(detectLoop);
         return;
@@ -138,6 +170,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     };
   }, [handleHandDetection]);
 
+  // Xử lý khi tay biến mất
   useEffect(() => {
     if (!handData.isHandDetected) {
       elements.current.forEach((item) => item.classList.remove("hover"));
@@ -151,6 +184,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     }
   }, [handData]);
 
+  // Xử lý khi tay mở ra
   useEffect(() => {
     if (!isHandDetectionEnabled) return;
 
@@ -166,6 +200,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     }
   }, [handData, isHandDetectionEnabled, onOpenHand]);
 
+  // Sửa: Thêm hiệu ứng chuyển động mượt mà hơn
   return (
     <HandControlContext.Provider
       value={{
@@ -181,10 +216,10 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
       {handDataRef.current.isHandDetected && isHandDetectionEnabled && (
         <div
           ref={cursorRef}
-          className={`absolute w-8 h-8 rounded-full bg-pink-500 border-4 border-white pointer-events-none z-[100] transition-all duration-100 ${isLoading ? "opacity-0" : "opacity-100"}`}
-          style={{
-            transform: `translate(${handDataRef.current.cursorPosition.x}px, ${handDataRef.current.cursorPosition.y}px)`,
-            backgroundColor: handDataRef.current.isFist ? "#28a745" : "#ff69b4", // Đổi màu con trỏ khi fist
+          className={`absolute w-8 h-8 rounded-full bg-pink-500 border-4 border-white pointer-events-none z-[100] ${isLoading ? "opacity-0" : "opacity-100"}`}
+          style={{ 
+            transform: "translate(0px, 0px)",
+            transition: "opacity 0.3s ease"
           }}
         />
       )}

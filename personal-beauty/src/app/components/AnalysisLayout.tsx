@@ -90,7 +90,11 @@ const AnalysisLayout = memo(
         
         <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 overflow-hidden">
           {/* Video Container - Optimized with will-change */}
-          <div className="md:w-2/3 rounded-xl flex flex-col items-center will-change-transform">
+          <div
+            className={`${
+              selectionButtons ? "md:w-7/12" : "md:w-2/3"
+            } px-6 md:px-2 rounded-xl flex flex-col items-center`}
+          >
             <div 
               className="relative w-full overflow-hidden rounded-xl shadow-lg border-2 border-gray-200 bg-white" 
               style={{ paddingTop: "75%" /* 480/640 = 0.75 */ }}
@@ -109,17 +113,17 @@ const AnalysisLayout = memo(
                 className="absolute inset-0 w-full h-full object-contain pointer-events-none"
               />
             </div>
-            
-            {/* Selection Buttons with Animation */}
-            {selectionButtons && (
-              <div className="flex flex-wrap justify-center gap-3 mt-3 w-full max-h-[100px] overflow-x-auto overflow-y-hidden">
+          </div>
+          {selectionButtons && (<div className="md:w-2/12 p-1 rounded-xl flex flex-col max-h-[calc(100vh-64px)] overflow-hidden">
+              <div className="flex flex-col flex-wrap gap-3 w-full h-full">
                 {selectionButtons}
               </div>
-            )}
-          </div>
-
+          </div>)}
           {/* Results Container */}
-          <div className="md:w-1/3 bg-white p-4 rounded-xl shadow-md flex flex-col">
+          <div
+            className={`${
+              selectionButtons ? "md:w-3/12" : "md:w-1/3"
+            } bg-white p-4 rounded-xl shadow-md flex flex-col`}          >
             <div className="mb-3">
               <h5 className="text-xl md:text-2xl font-bold text-pink-600 mb-1">
                 {title}

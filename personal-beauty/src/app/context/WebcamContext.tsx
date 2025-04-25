@@ -109,7 +109,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [VIEWS.HOME]: ["hand"],
     [VIEWS.HAIR_COLOR]: ["hand"],
     [VIEWS.PERSONAL_MAKEUP]: ["hand", "face"],
-    [VIEWS.COSMETIC_SURGERY]: ["face", "pose"],
+    [VIEWS.COSMETIC_SURGERY]: ["face", "hand"],
   }), []);
 
   // Hàm phát hiện cử chỉ tay - tối ưu hóa với useMemo

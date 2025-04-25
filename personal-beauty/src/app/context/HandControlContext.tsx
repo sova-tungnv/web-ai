@@ -1,3 +1,5 @@
+// src/app/context/HandControlContext.tsx
+
 "use client";
 
 import React, { createContext, useContext, useCallback, useRef, useEffect, useState } from "react";
@@ -180,7 +182,10 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
         <div
           ref={cursorRef}
           className={`absolute w-8 h-8 rounded-full bg-pink-500 border-4 border-white pointer-events-none z-[100] transition-all duration-100 ${isLoading ? "opacity-0" : "opacity-100"}`}
-          style={{ transform: "translate(0px, 0px)" }}
+          style={{
+            transform: `translate(${handDataRef.current.cursorPosition.x}px, ${handDataRef.current.cursorPosition.y}px)`,
+            backgroundColor: handDataRef.current.isFist ? "#28a745" : "#ff69b4", // Đổi màu con trỏ khi fist
+          }}
         />
       )}
     </HandControlContext.Provider>

@@ -17,14 +17,12 @@ export default function CosmeticSurgery() {
 
   const [error, setError] = useState<string | null>(null);
   const [isFaceLandmarkerReady, setIsFaceLandmarkerReady] = useState(false);
+  const [topPoint, setTopPoint] = useState<NormalizedLandmark | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const loading = useLoading();
-  const [mouthWidth, setMouthWidth] = useState<number | null>(null);
-  const [noseWidth, setNoseWidth] = useState<number | null>(null);
-  const [foreheadWidth, setForeheadWidth] = useState<number | null>(null);
-  const [jawWidth, setJawWidth] = useState<number | null>(null);
+  const [result, setResult] = useState<string | null>(null);
   // const
   useEffect(() => {
     const initializeFaceLandmarker = async () => {
@@ -92,6 +90,44 @@ export default function CosmeticSurgery() {
       return;
     }
 
+    const buildResult = (
+      mouthWidth: number | null,
+      noseWidth: number | null,
+      foreheadWidth: number | null,
+      jawWidth: number | null,
+      eyebrowsToNoseDistance: number | null,
+      noseToChinDistance: number | null
+    ) => {
+      if (
+        !mouthWidth ||
+        !noseWidth ||
+        !foreheadWidth ||
+        !jawWidth ||
+        !eyebrowsToNoseDistance ||
+        !noseToChinDistance
+      ) {
+        setResult(null);
+
+        return;
+      }
+      let _result = "";
+      _result += `<p> - Ratio between your mouth and nose is: ${(
+        mouthWidth / noseWidth
+      ).toFixed(3)}</p>`;
+      _result += `<p> The suggestion ratio is 1.618</p>`;
+
+      _result += `<p> - Ratio between your jaw and forehead is: ${(
+        jawWidth / foreheadWidth
+      ).toFixed(3)}</p>`;
+      _result += `<p> The suggestion ratio is 0.8</p>`;
+
+      _result += `<p> - Ratio between the distance from eyebrows to nose and the distance from nose to chin is: ${(
+        noseToChinDistance / eyebrowsToNoseDistance
+      ).toFixed(3)}</p>`;
+      _result += `<p> The suggestion ratio is 1</p>`;
+      setResult(_result);
+    };
+
     const waitForVideoReady = async () => {
       let retries = 5;
       while (retries > 0 && video.readyState < 4) {
@@ -113,10 +149,20 @@ export default function CosmeticSurgery() {
       return Math.sqrt(dx * dx + dy * dy);
     };
     const drawFaceShape = (landmarks: NormalizedLandmark[]) => {
-      const topFace = landmarks[10];
+      const midpoint = {
+        x: (landmarks[105].x + landmarks[334].x) / 2,
+        y: (landmarks[105].y + landmarks[334].y) / 2,
+      };
+      const symmetryPoint = {
+        x: 2 * landmarks[10].x - midpoint.x,
+        y: 2 * landmarks[10].y - midpoint.y,
+      };
+      setTopPoint(symmetryPoint as NormalizedLandmark);
+      const topFace = symmetryPoint;
       const bottomFace = landmarks[152];
       const leftFace = landmarks[234];
       const rightFace = landmarks[454];
+
       // Draw top-left corner L
       ctx.strokeStyle = "aqua";
       ctx.beginPath();
@@ -178,7 +224,8 @@ export default function CosmeticSurgery() {
       const point3ToPoint4Distance = calculateDistance(point3, point4);
       const ratio = point3ToPoint4Distance / point1ToPoint2Distance;
       drawText("1", point1, point2);
-      drawText(ratio.toFixed(2), point3, point4);
+      drawText(ratio.toFixed(3), point3, point4);
+      return { ratio, point1ToPoint2Distance, point3ToPoint4Distance };
     };
 
     const calculatePerpendicularDistance = (
@@ -212,10 +259,39 @@ export default function CosmeticSurgery() {
       return { distance, line1Midpoint, line2Midpoint };
     };
 
+    const calculateAngleBetweenLines = (
+      line1Start: NormalizedLandmark,
+      line1End: NormalizedLandmark,
+      line2Start: NormalizedLandmark,
+      line2End: NormalizedLandmark
+    ) => {
+      const vector1 = {
+        x: line1End.x - line1Start.x,
+        y: line1End.y - line1Start.y,
+      };
+      const vector2 = {
+        x: line2End.x - line2Start.x,
+        y: line2End.y - line2Start.y,
+      };
+
+      const dotProduct = vector1.x * vector2.x + vector1.y * vector2.y;
+      const magnitude1 = Math.sqrt(
+        vector1.x * vector1.x + vector1.y * vector1.y
+      );
+      const magnitude2 = Math.sqrt(
+        vector2.x * vector2.x + vector2.y * vector2.y
+      );
+
+      const angleInRadians = Math.acos(dotProduct / (magnitude1 * magnitude2));
+      const angleInDegrees = (angleInRadians * 180) / Math.PI;
+
+      return angleInDegrees;
+    };
+
     const drawDashedLineBetweenPoints = (
       point1: NormalizedLandmark,
       point2: NormalizedLandmark,
-      color: string
+      color: string = "black"
     ) => {
       ctx.strokeStyle = color;
       ctx.lineWidth = 1;
@@ -229,21 +305,27 @@ export default function CosmeticSurgery() {
 
     const drawingFaceGrid = (landmarks: NormalizedLandmark[]) => {
       drawFaceShape(landmarks);
-      drawRatioBetweenPoints(
+      const {
+        point1ToPoint2Distance: _noseWidth,
+        point3ToPoint4Distance: _mouthWidth,
+      } = drawRatioBetweenPoints(
         landmarks[48],
         landmarks[278],
         landmarks[61],
         landmarks[308],
         "red"
-      ); // Jawline
+      ); // tỉ lệ chiều ngang giữa mũi và miệng (1.612)
 
-      drawRatioBetweenPoints(
+      const {
+        point1ToPoint2Distance: _foreHeadWidth,
+        point3ToPoint4Distance: _jewWidth,
+      } = drawRatioBetweenPoints(
         landmarks[54],
         landmarks[284],
         landmarks[136],
         landmarks[365],
         "blue"
-      ); // Face shape
+      ); // Tỉ lệ chiều ngang giữa chán và hàm
 
       const {
         distance: d1,
@@ -252,10 +334,10 @@ export default function CosmeticSurgery() {
       } = calculatePerpendicularDistance(
         landmarks[55],
         landmarks[285],
-        landmarks[48],
-        landmarks[278],
-        "orange"
-      );
+        landmarks[98],
+        landmarks[327],
+        "purple"
+      ); // Chiều dài giữa lông mày và mũi
       drawText("1", ma1 as NormalizedLandmark, ma2 as NormalizedLandmark);
 
       const {
@@ -263,17 +345,34 @@ export default function CosmeticSurgery() {
         line1Midpoint: mb1,
         line2Midpoint: mb2,
       } = calculatePerpendicularDistance(
-        landmarks[48],
-        landmarks[278],
+        landmarks[98],
+        landmarks[327],
         landmarks[148],
         landmarks[377],
-        "orange"
-      );
+        "red"
+      ); // Chiều dài giữa mũi và cằm
       drawText(
-        (d2 / d1).toFixed(2),
+        (d2 / d1).toFixed(3),
         mb1 as NormalizedLandmark,
         { ...mb2, y: mb2.y - 0.1 } as NormalizedLandmark
       );
+      drawDashedLineBetweenPoints(landmarks[152], landmarks[58]);
+      drawDashedLineBetweenPoints(landmarks[152], landmarks[288]);
+
+      const angle = calculateAngleBetweenLines(
+        landmarks[152],
+        landmarks[58],
+        landmarks[152],
+        landmarks[288]
+      );
+
+      drawText(
+        `${angle.toFixed(2)}°`,
+        landmarks[152],
+        { ...landmarks[152], y: landmarks[152].y + 0.05 } as NormalizedLandmark,
+        "green"
+      );
+      buildResult(_mouthWidth, _noseWidth, _foreHeadWidth, _jewWidth, d1, d2);
     };
 
     const detect = async () => {
@@ -319,6 +418,7 @@ export default function CosmeticSurgery() {
           const landmarks = results.faceLandmarks[0];
           // analyzeFace(landmarks);
           drawingFaceGrid(landmarks);
+          // buildResult();
         }
       } catch (err) {
         console.error("[CosmeticSurgery] Error during face detection:", err);
@@ -343,7 +443,7 @@ export default function CosmeticSurgery() {
         description="Analyze facial features for cosmetic surgery recommendations."
         videoRef={videoRef}
         canvasRef={canvasRef}
-        result={null}
+        result={result}
         error={error || webcamError}
       />
     </div>

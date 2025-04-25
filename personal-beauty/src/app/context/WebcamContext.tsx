@@ -80,16 +80,21 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Hàm kiểm tra cử chỉ tay (dùng cho luồng full detection)
   const detectGesture = useCallback((landmarks: any[]) => {
     const THRESHOLD = 0.1;
-    const distanceIndex = Math.hypot(landmarks[8].x - landmarks[5].x, landmarks[8].y - landmarks[5].y);
-    const distanceMiddle = Math.hypot(landmarks[12].x - landmarks[9].x, landmarks[12].y - landmarks[9].y);
-    const isFist = distanceIndex < 0.1 && distanceMiddle < 0.1;
-    const isOpenHand =
-      landmarks[8].y < landmarks[5].y - THRESHOLD &&
-      landmarks[12].y < landmarks[9].y - THRESHOLD &&
-      landmarks[16].y < landmarks[13].y - THRESHOLD &&
-      landmarks[20].y < landmarks[17].y - THRESHOLD;
-    const isIndexRaised = landmarks[8].y < landmarks[5].y - THRESHOLD;
-    return { isFist, isOpenHand, isIndexRaised };
+    const FIST_DISTANCE_THRESHOLD = 0.15; // Ngưỡng cho ngón trỏ cụp chặt
+   // Tính khoảng cách Euclidean giữa đầu ngón trỏ và đốt giữa
+   const distanceIndex = Math.hypot(landmarks[8].x - landmarks[5].x, landmarks[8].y - landmarks[5].y);
+   // Kiểm tra độ cao tương đối để xác định ngón trỏ có cụp vào lòng bàn tay không
+   const isIndexFolded = landmarks[8].y > landmarks[5].y; // Đầu ngón trỏ thấp hơn đốt giữa
+   // Chỉ yêu cầu ngón trỏ cụp chặt và ở vị trí thấp
+   const isFist = distanceIndex < FIST_DISTANCE_THRESHOLD && isIndexFolded;
+   const isOpenHand =
+     landmarks[8].y < landmarks[5].y - THRESHOLD &&
+     landmarks[12].y < landmarks[9].y - THRESHOLD &&
+     landmarks[16].y < landmarks[13].y - THRESHOLD &&
+     landmarks[20].y < landmarks[17].y - THRESHOLD;
+
+   const isIndexRaised = landmarks[8].y < landmarks[5].y - THRESHOLD;
+   return { isFist, isOpenHand, isIndexRaised };
   }, []);
 
   // Hàm phát hiện cử chỉ tay và vị trí con trỏ (dùng cho luồng full detection)

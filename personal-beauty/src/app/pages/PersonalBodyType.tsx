@@ -58,8 +58,8 @@ const SelectionButton: React.FC<{
 };
 
 export default function PersonalBodyType() {
-  const { setDetectionType, setIsHandDetectionEnabled, isTwoFingersRaised, handData } = useWebcam();
-  const { setOpenHandAction } = useHandControl();
+  const { setIsHandDetectionEnabled, handData } = useWebcam();
+  // const { setOpenHandAction } = useHandControl();
   const [isPoseDetectionActive, setIsPoseDetectionActive] = useState(true);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("Pose Detection Active");
@@ -68,20 +68,20 @@ export default function PersonalBodyType() {
   const lastInteractionTime = useRef<number>(Date.now());
 
   // Thiết lập detection type là "pose"
-  useEffect(() => {
-    setDetectionType("pose");
-  }, [setDetectionType]);
+  // useEffect(() => {
+  //   setDetectionType("pose");
+  // }, [setDetectionType]);
 
   // Tùy chỉnh hành động khi Open Hand
-  useEffect(() => {
-    setOpenHandAction(() => {
-      setIsPoseDetectionActive(true);
-    });
+  // useEffect(() => {
+  //   setOpenHandAction(() => {
+  //     setIsPoseDetectionActive(true);
+  //   });
 
-    return () => {
-      setOpenHandAction(() => {});
-    };
-  }, [setOpenHandAction, setIsPoseDetectionActive]);
+  //   return () => {
+  //     setOpenHandAction(() => {});
+  //   };
+  // }, [setOpenHandAction, setIsPoseDetectionActive]);
 
   // Quản lý chế độ pose detection và hand detection
   useEffect(() => {
@@ -95,25 +95,25 @@ export default function PersonalBodyType() {
   }, [isPoseDetectionActive, setIsHandDetectionEnabled]);
 
   // Phát hiện cử chỉ giơ 2 ngón tay
-  useEffect(() => {
-    if (isPoseDetectionActive) {
-      if (isTwoFingersRaised) {
-        if (!twoFingersStartTime.current) {
-          twoFingersStartTime.current = Date.now();
-        }
-        const elapsed = Date.now() - twoFingersStartTime.current;
-        setTwoFingersProgress((elapsed / 2000) * 100);
-        if (elapsed >= 2000) {
-          setIsPoseDetectionActive(false);
-          twoFingersStartTime.current = null;
-          setTwoFingersProgress(0);
-        }
-      } else {
-        twoFingersStartTime.current = null;
-        setTwoFingersProgress(0);
-      }
-    }
-  }, [isTwoFingersRaised, isPoseDetectionActive]);
+  // useEffect(() => {
+  //   if (isPoseDetectionActive) {
+  //     if (isTwoFingersRaised) {
+  //       if (!twoFingersStartTime.current) {
+  //         twoFingersStartTime.current = Date.now();
+  //       }
+  //       const elapsed = Date.now() - twoFingersStartTime.current;
+  //       setTwoFingersProgress((elapsed / 2000) * 100);
+  //       if (elapsed >= 2000) {
+  //         setIsPoseDetectionActive(false);
+  //         twoFingersStartTime.current = null;
+  //         setTwoFingersProgress(0);
+  //       }
+  //     } else {
+  //       twoFingersStartTime.current = null;
+  //       setTwoFingersProgress(0);
+  //     }
+  //   }
+  // }, [isTwoFingersRaised, isPoseDetectionActive]);
 
   // Tự động quay lại pose detection nếu không có tương tác
   useEffect(() => {
@@ -151,13 +151,13 @@ export default function PersonalBodyType() {
     <AnalysisLayout
       title="Personal Body Type"
       description="Analyze your body type using live video."
-      videoRef={null}
-      canvasRef={null}
+      videoRef={null as any}
+      canvasRef={null as any}
       result={selectedOption}
       error={null}
       selectionButtons={selectionButtons}
-      colorPalette={null}
-      actionButtons={null}
+      colorPalette={null as any}
+      actionButtons={null as any}
       statusMessage={statusMessage}
       progress={twoFingersProgress}
     />

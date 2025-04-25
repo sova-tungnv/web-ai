@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { PoseLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { golfPostureStandards, analyzePosture } from "../libs/golfData";
 import { calculateAngle, getMiddlePoint, makeSmoothLandmarks } from "../libs/utils";

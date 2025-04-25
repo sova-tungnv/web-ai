@@ -62,7 +62,7 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
   }, []);
 
   const toggleHandDetection = useCallback((enable: boolean) => {
-    setIsHandDetectionEnabled((prev: boolean) => (prev !== enable ? enable : prev));
+    setIsHandDetectionEnabled(enable);
   }, [setIsHandDetectionEnabled]);
 
   const onHover = useCallback(() => {

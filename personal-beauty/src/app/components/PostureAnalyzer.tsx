@@ -140,7 +140,7 @@ const PostureAnalyzer: React.FC<PostureAnalyzerProps> = ({ clubType }) => {
           const landmarks = results.landmarks[0];
 
           // Smooth landmarks
-          const newSmoothLandmarks = makeSmoothLandmarks(landmarks, smoothLandmarks, smoothingFactor);
+          const newSmoothLandmarks = makeSmoothLandmarks(landmarks, smoothLandmarks || [], smoothingFactor);
           setSmoothLandmarks(newSmoothLandmarks);
           setInitialPositions(landmarks);
 

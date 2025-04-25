@@ -26,7 +26,7 @@ interface WebcamContextType {
   detectionResults: { [key: string]: any };
   currentView: string;
   setCurrentView: (view: any) => void;
-  cursorRef: RefObject<HTMLDivElement>;
+  cursorRef: RefObject<HTMLDivElement | null>;
 }
 
 const WebcamContext = createContext<WebcamContextType | undefined>(undefined);

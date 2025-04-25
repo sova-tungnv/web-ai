@@ -11,6 +11,8 @@ import CosmeticSurgery from "./pages/CosmeticSurgery";
 import { VIEWS, ViewType } from "./constants/views";
 import { useLoading } from "./context/LoadingContext";
 
+// 
+
 export default function Home() {
   const { setIsLoading } = useLoading();
 

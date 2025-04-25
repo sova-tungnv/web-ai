@@ -178,15 +178,29 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     workerRef.current = new Worker(new URL("../worker/VisionWorker.ts", import.meta.url));
     workerRef.current.onmessage = (e: MessageEvent) => {
       const { type, results } = e.data;
-
-      if (type === "detectionResult" && results?.hand?.landmarks?.length > 0) {
-        const landmarks = results.hand.landmarks[0];
-        const detected = detectFull(landmarks);
-        setHandData(detected);
-        setDetectionResults(results);
-        if (cursorRef.current && isHandDetectionEnabled) {
-          cursorRef.current.style.transform = `translate(${detected.cursorPosition.x}px, ${detected.cursorPosition.y}px)`;
+      console.log("[WebcamContext] Worker message:", { type, results });
+      if (type === "detectionResult") {
+        if (results?.hand?.landmarks?.length > 0) {
+          const landmarks = results.hand.landmarks[0];
+          const detected = detectFull(landmarks);
+          setHandData(detected);
+          setDetectionResults(results);
+          if (cursorRef.current && isHandDetectionEnabled) {
+            cursorRef.current.style.transform = `translate(${detected.cursorPosition.x}px, ${detected.cursorPosition.y}px)`;
+          }
+          //console.log("[WebcamContext] Hand detected:", detected);
+        } else {
+          setHandData({
+            isHandDetected: false,
+            cursorPosition: lastPositionBeforeFist.current || { x: 0, y: 0 },
+            isFist: false,
+            isOpenHand: false,
+          });
+          setDetectionResults(results);
+          console.log("[WebcamContext] No hand detected, resetting handData");
         }
+      } else if (type === "detectionError") {
+        console.error("[WebcamContext] Detection error:", results.error);
       }
     };
     return () => {

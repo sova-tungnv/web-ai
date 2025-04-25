@@ -3,10 +3,10 @@
 
 "use client";
 
-import React, { RefObject, createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
-import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import React, { RefObject, createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { ViewType, VIEWS } from "../constants/views";
 
+// Định nghĩa rõ ràng các kiểu dữ liệu
 interface HandData {
   isHandDetected: boolean;
   cursorPosition: { x: number; y: number };
@@ -16,7 +16,7 @@ interface HandData {
 
 interface WebcamContextType {
   stream: MediaStream | null;
-  videoRef: any;
+  videoRef: RefObject<HTMLVideoElement>;
   error: string | null;
   restartStream: () => Promise<void>;
   handData: HandData;
@@ -25,12 +25,24 @@ interface WebcamContextType {
   isHandDetectionEnabled: boolean;
   detectionResults: { [key: string]: any };
   currentView: string;
-  setCurrentView: (view: any) => void;
+  setCurrentView: (view: string) => void; // Đã sửa kiểu dữ liệu
   cursorRef: RefObject<HTMLDivElement>;
 }
 
+// Các hằng số cho xử lý mượt mà
+const DETECTION_FPS = 60; // 60fps cho phát hiện tay
+const FACE_DETECTION_FPS = 15; // 15fps cho phát hiện mặt
+const HAND_DETECTION_INTERVAL = 1000 / DETECTION_FPS;
+const FACE_DETECTION_INTERVAL = 1000 / FACE_DETECTION_FPS;
+
+// Hằng số cho phát hiện cử chỉ
+const GESTURE_THRESHOLD = 0.045; // Giảm ngưỡng để nhạy hơn
+const FIST_THRESHOLD = 0.07; // Ngưỡng phát hiện nắm đấm
+
+// Context mặc định
 const WebcamContext = createContext<WebcamContextType | undefined>(undefined);
 
+// Hook sử dụng context
 export const useWebcam = () => {
   const context = useContext(WebcamContext);
   if (!context) {
@@ -39,323 +51,602 @@ export const useWebcam = () => {
   return context;
 };
 
+// Provider component tối ưu hóa
 export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Sử dụng các ref cho dữ liệu performance-critical
+  const streamRef = useRef<MediaStream | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<string>(VIEWS.HOME);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const workerRef = useRef<Worker | null>(null);
-  const animationFrameId = useRef<number | null>(null);
-  const lightweightFrameId = useRef<number | null>(null);
-  const lastDetectTime = useRef(0);
+  const cursorRef = useRef<HTMLDivElement>(null);
+  
+  // Worker refs
+  const handWorkerRef = useRef<Worker | null>(null);
+  const faceWorkerRef = useRef<Worker | null>(null);
+  
+  // Animation frames
+  const handAnimationFrameId = useRef<number | null>(null);
+  const faceAnimationFrameId = useRef<number | null>(null);
+  
+  // Timing refs
+  const lastHandDetectTime = useRef(0);
+  const lastFaceDetectTime = useRef(0);
+  
+  // Performance critical data in refs
   const lastPositionBeforeFist = useRef<{ x: number; y: number } | null>(null);
   const smoothPosition = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const cursorRef = useRef<HTMLDivElement>(null);
-  const ALPHA = 0.3;
+  const handDataRef = useRef<HandData>({
+    isHandDetected: false,
+    cursorPosition: { x: 0, y: 0 },
+    isFist: false,
+    isOpenHand: false,
+  });
+  
+  // Settings for smoothing
+  const baseAlpha = 0.8; // Tăng từ 0.7 lên 0.8 để giảm độ trễ hơn nữa
+  const alphaRef = useRef(baseAlpha);
+  
+  // States
   const [handData, setHandData] = useState<HandData>({
     isHandDetected: false,
     cursorPosition: { x: 0, y: 0 },
     isFist: false,
     isOpenHand: false,
   });
-  const [isHandDetectionEnabled, setIsHandDetectionEnabled] = useState(true); // Đặt mặc định là false
+  const [isHandDetectionEnabled, setIsHandDetectionEnabled] = useState(true); 
   const [isIndexFingerRaised, setIsIndexFingerRaised] = useState(false);
   const [detectionResults, setDetectionResults] = useState<{ [key: string]: any }>({});
-  const modelRequirements: { [key: string]: string[] } = {
+  
+  // Worker states
+  const [isHandWorkerInitialized, setIsHandWorkerInitialized] = useState(false);
+  const [isFaceWorkerInitialized, setIsFaceWorkerInitialized] = useState(false);
+  
+  // Sử dụng useMemo để tránh tính toán lại
+  const modelRequirements = useMemo(() => ({
     [VIEWS.PERSONAL_COLOR]: ["hand", "face"],
     [VIEWS.PERSONAL_BODY_TYPE]: ["pose"],
     [VIEWS.HOME]: ["hand"],
     [VIEWS.HAIR_COLOR]: ["hand"],
-    [VIEWS.PERSONAL_MAKEUP]: ["hand"],
+    [VIEWS.PERSONAL_MAKEUP]: ["hand", "face"],
     [VIEWS.COSMETIC_SURGERY]: ["face", "pose"],
-  };
+  }), []);
 
-  // Hàm chỉ kiểm tra ngón trỏ (dùng cho luồng lightweight detection)
-  const detectIndexFinger = useCallback((landmarks: any[]) => {
-    const THRESHOLD = 0.05;
-    const isIndexRaised = landmarks[8].y < landmarks[5].y - THRESHOLD;
-    return isIndexRaised;
-  }, []);
-
-  // Hàm kiểm tra cử chỉ tay (dùng cho luồng full detection)
+  // Hàm phát hiện cử chỉ tay - tối ưu hóa với useMemo
   const detectGesture = useCallback((landmarks: any[]) => {
-    const THRESHOLD = 0.1;
-    const distanceIndex = Math.hypot(landmarks[8].x - landmarks[5].x, landmarks[8].y - landmarks[5].y);
-    const distanceMiddle = Math.hypot(landmarks[12].x - landmarks[9].x, landmarks[12].y - landmarks[9].y);
-    const isFist = distanceIndex < 0.1 && distanceMiddle < 0.1;
+    // Tối ưu: Tính toán các điểm chuẩn trực tiếp
+    const indexFingerExtension = Math.hypot(landmarks[8].x - landmarks[5].x, landmarks[8].y - landmarks[5].y);
+    const middleFingerExtension = Math.hypot(landmarks[12].x - landmarks[9].x, landmarks[12].y - landmarks[9].y);
+    const ringFingerExtension = Math.hypot(landmarks[16].x - landmarks[13].x, landmarks[16].y - landmarks[13].y);
+    const pinkyExtension = Math.hypot(landmarks[20].x - landmarks[17].x, landmarks[20].y - landmarks[17].y);
+    
+    // Phát hiện nắm đấm tinh chỉnh - kiểm tra tốt hơn
+    const isFist = indexFingerExtension < FIST_THRESHOLD && 
+                   middleFingerExtension < FIST_THRESHOLD && 
+                   ringFingerExtension < FIST_THRESHOLD && 
+                   pinkyExtension < FIST_THRESHOLD;
+    
+    // Phát hiện bàn tay mở chính xác hơn
     const isOpenHand =
-      landmarks[8].y < landmarks[5].y - THRESHOLD &&
-      landmarks[12].y < landmarks[9].y - THRESHOLD &&
-      landmarks[16].y < landmarks[13].y - THRESHOLD &&
-      landmarks[20].y < landmarks[17].y - THRESHOLD;
-    const isIndexRaised = landmarks[8].y < landmarks[5].y - THRESHOLD;
+      landmarks[8].y < landmarks[5].y - GESTURE_THRESHOLD &&
+      landmarks[12].y < landmarks[9].y - GESTURE_THRESHOLD &&
+      landmarks[16].y < landmarks[13].y - GESTURE_THRESHOLD &&
+      landmarks[20].y < landmarks[17].y - GESTURE_THRESHOLD;
+    
+    // Chỉ kiểm tra ngón trỏ
+    const isIndexRaised = landmarks[8].y < landmarks[5].y - GESTURE_THRESHOLD;
+    
     return { isFist, isOpenHand, isIndexRaised };
   }, []);
 
-  // Hàm phát hiện cử chỉ tay và vị trí con trỏ (dùng cho luồng full detection)
+  // Tối ưu: Hàm phát hiện và xử lý vị trí con trỏ
   const detectFull = useCallback((landmarks: any[]) => {
+    // Phát hiện cử chỉ
     const { isFist, isOpenHand, isIndexRaised } = detectGesture(landmarks);
+    
+    // Lấy vị trí đầu ngón trỏ
     const indexFingerTip = landmarks[8];
-    const videoWidth = 320;
-    const videoHeight = 240;
+    
+    // Tính toán tỷ lệ thực tế
+    const videoWidth = videoRef.current?.videoWidth || 640;
+    const videoHeight = videoRef.current?.videoHeight || 480;
     const scaleX = window.innerWidth / videoWidth;
     const scaleY = window.innerHeight / videoHeight;
+    
+    // Điều chỉnh vị trí (đảo ngược trục X cho phản chiếu webcam)
     const adjustedX = (1 - indexFingerTip.x) * videoWidth * scaleX;
     const adjustedY = indexFingerTip.y * videoHeight * scaleY;
+    
+    // Giới hạn trong màn hình
     const clampedX = Math.max(0, Math.min(adjustedX, window.innerWidth - 1));
     const clampedY = Math.max(0, Math.min(adjustedY, window.innerHeight - 1));
 
+    // Lưu vị trí trước khi nắm đấm nếu trước đó không phải nắm đấm
+    if (isFist && !handDataRef.current.isFist) {
+      lastPositionBeforeFist.current = { 
+        x: smoothPosition.current.x, 
+        y: smoothPosition.current.y 
+      };
+    }
+
+    // Tính khoảng cách di chuyển
+    const distance = Math.sqrt(
+      Math.pow(clampedX - smoothPosition.current.x, 2) + 
+      Math.pow(clampedY - smoothPosition.current.y, 2)
+    );
+    
+    // Alpha động: di chuyển nhanh = ít làm mượt
+    const dynamicAlpha = distance > 100 ? 0.95 : 
+                         distance > 50 ? 0.9 : 
+                         distance > 25 ? 0.85 : baseAlpha;
+    
+    // Cập nhật ref
+    alphaRef.current = dynamicAlpha;
+    
+    // Tính toán vị trí làm mượt
     const currentPosition = {
-      x: Math.round((ALPHA * clampedX + (1 - ALPHA) * smoothPosition.current.x) * 100) / 100,
-      y: Math.round((ALPHA * clampedY + (1 - ALPHA) * smoothPosition.current.y) * 100) / 100,
+      x: Math.round((dynamicAlpha * clampedX + (1 - dynamicAlpha) * smoothPosition.current.x)),
+      y: Math.round((dynamicAlpha * clampedY + (1 - dynamicAlpha) * smoothPosition.current.y)),
     };
 
+    // Cập nhật vị trí
     smoothPosition.current = currentPosition;
-    lastPositionBeforeFist.current = null;
 
-    //console.log("[detectFull] cursorPosition:", currentPosition);
-
-    return {
+    // Cập nhật handDataRef
+    handDataRef.current = {
       isHandDetected: true,
       cursorPosition: currentPosition,
       isFist,
       isOpenHand,
-      isIndexRaised,
     };
-  }, [detectGesture]);
 
-  const startStream = async () => {
+    // QUAN TRỌNG: Cập nhật trực tiếp DOM cho con trỏ
+    if (cursorRef.current) {
+      // Sử dụng transform để tối ưu GPU
+      cursorRef.current.style.transform = `translate(${currentPosition.x}px, ${currentPosition.y}px)`;
+      
+      // Thêm hiệu ứng khi nắm đấm
+      if (isFist) {
+        cursorRef.current.classList.add('fist');
+      } else {
+        cursorRef.current.classList.remove('fist');
+      }
+      
+      // Thêm hiệu ứng khi bàn tay mở
+      if (isOpenHand) {
+        cursorRef.current.classList.add('open-hand');
+      } else {
+        cursorRef.current.classList.remove('open-hand');
+      }
+    }
+
+    return handDataRef.current;
+  }, [detectGesture, baseAlpha]);
+
+  // Khởi động stream
+  const startStream = useCallback(async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      // Dọn sạch stream cũ nếu có
+      if (streamRef.current) {
+        console.log("[WebcamProvider] Cleaning up existing stream before starting new one");
+        streamRef.current.getTracks().forEach((track) => {
+          track.stop();
+          console.log(`[WebcamProvider] Track ${track.id} stopped`);
+        });
+        streamRef.current = null;
+      }
+      
+      // Yêu cầu độ phân giải thấp hơn để tránh quá tải
+      const constraints = {
         video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 30, max: 30 }
-        },
-      });
+          width: { ideal: 640, max: 1280 },
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 30, max: 60 }
+        }
+      };
+      
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      console.log("[WebcamProvider] Stream started with tracks:", mediaStream.getTracks());
+      
+      // Cập nhật refs và state
+      streamRef.current = mediaStream;
       setStream(mediaStream);
+      
     } catch (err) {
       console.error("[WebcamProvider] Error accessing webcam:", err);
-      setError("Failed to access webcam. Please check your camera permissions.");
+      setError(`Failed to access webcam: ${(err as Error).message}`);
     }
-  };
-
-  const restartStream = async () => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-    }
-    setStream(null);
-    await startStream();
-  };
-
-  useEffect(() => {
-    startStream();
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    };
   }, []);
 
+  // Khởi động lại stream
+  const restartStream = useCallback(async () => {
+    console.log("[WebcamProvider] Restarting stream...");
+    
+    // Dừng stream hiện tại
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        track.stop();
+        console.log(`[WebcamProvider] Track ${track.id} stopped`);
+      });
+    }
+    
+    // Reset states
+    setStream(null);
+    streamRef.current = null;
+    
+    // Bắt đầu stream mới
+    await startStream();
+  }, [startStream]);
+
+  // Khởi tạo stream
+  useEffect(() => {
+    console.log("[WebcamProvider] Initializing webcam...");
+    startStream();
+    
+    // Cleanup khi unmount
+    return () => {
+      console.log("[WebcamProvider] Cleaning up webcam...");
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [startStream]);
+
+  // Cập nhật video source khi stream thay đổi
   useEffect(() => {
     if (stream && videoRef.current) {
+      console.log("[WebcamProvider] Setting video source...");
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch((err) => {
         console.error("[WebcamProvider] Error playing video:", err);
+        setError(`Error playing video: ${err.message}`);
       });
     }
   }, [stream]);
 
+  // Đồng bộ handData state với ref
   useEffect(() => {
-    workerRef.current = new Worker(new URL("../worker/VisionWorker.ts", import.meta.url));
-    workerRef.current.onmessage = (e: MessageEvent) => {
-      const { type, results } = e.data;
+    // Tối ưu: Cập nhật state ít hơn (chỉ 30 lần/giây) nhưng DOM vẫn mượt 60fps
+    let frameCount = 0;
+    const updateHandDataState = () => {
+      frameCount++;
+      
+      // Chỉ cập nhật state mỗi 2 frame để giảm re-render
+      if (frameCount % 2 === 0) {
+        setHandData({...handDataRef.current});
+      }
+      
+      requestAnimationFrame(updateHandDataState);
+    };
+    
+    const rafId = requestAnimationFrame(updateHandDataState);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
-      if (type === "detectionResult" && results?.hand?.landmarks?.length > 0) {
-        const landmarks = results.hand.landmarks[0];
-        const detected = detectFull(landmarks);
-        setHandData(detected);
-        setDetectionResults(results);
-        if (cursorRef.current && isHandDetectionEnabled) {
-          cursorRef.current.style.transform = `translate(${detected.cursorPosition.x}px, ${detected.cursorPosition.y}px)`;
+  // Khởi tạo workers
+  useEffect(() => {
+    console.log("[WebcamProvider] Initializing workers...");
+    
+    // Khởi tạo HandWorker
+    try {
+      handWorkerRef.current = new Worker(new URL("./HandWorker.ts", import.meta.url));
+      handWorkerRef.current.onmessage = (e: MessageEvent) => {
+        const { type, results, error: workerError } = e.data;
+
+        if (type === "initialized") {
+          console.log("[WebcamProvider] Hand worker initialized");
+          setIsHandWorkerInitialized(true);
         }
-      }
-    };
+        
+        if (workerError) {
+          console.error("[HandWorker] Error:", workerError);
+        }
+        
+        if (type === "detectionResult" && results?.hand) {
+          // Phát hiện tay
+          if (results.hand.landmarks?.length > 0) {
+            const landmarks = results.hand.landmarks[0];
+            const detected = detectFull(landmarks);
+            setIsIndexFingerRaised(detected.isOpenHand);
+          } else {
+            // Không phát hiện tay
+            handDataRef.current = {
+              ...handDataRef.current,
+              isHandDetected: false,
+            };
+            setIsIndexFingerRaised(false);
+            
+            // Ẩn con trỏ khi không phát hiện tay
+            if (cursorRef.current) {
+              cursorRef.current.classList.add('hidden');
+            }
+          }
+          
+          // Chỉ cập nhật detection results khi thực sự có thay đổi
+          setDetectionResults(prev => {
+            // So sánh kết quả mới và cũ
+            if (JSON.stringify(prev.hand) !== JSON.stringify(results.hand)) {
+              return {
+                ...prev,
+                hand: results.hand
+              };
+            }
+            return prev;
+          });
+        }
+      };
+    } catch (error) {
+      console.error("[WebcamProvider] Error creating hand worker:", error);
+      setError("Failed to initialize hand detection");
+    }
+
+    // Khởi tạo FaceWorker
+    try {
+      faceWorkerRef.current = new Worker(new URL("./FaceWorker.ts", import.meta.url));
+      faceWorkerRef.current.onmessage = (e: MessageEvent) => {
+        const { type, results, error: workerError } = e.data;
+
+        if (type === "initialized") {
+          console.log("[WebcamProvider] Face worker initialized");
+          setIsFaceWorkerInitialized(true);
+        }
+        
+        if (workerError) {
+          console.error("[FaceWorker] Error:", workerError);
+        }
+        
+        if (type === "detectionResult" && results?.face) {
+          // Chỉ cập nhật detection results khi thực sự có thay đổi
+          setDetectionResults(prev => {
+            // So sánh kết quả mới và cũ
+            if (JSON.stringify(prev.face) !== JSON.stringify(results.face)) {
+              return {
+                ...prev,
+                face: results.face
+              };
+            }
+            return prev;
+          });
+        }
+      };
+    } catch (error) {
+      console.error("[WebcamProvider] Error creating face worker:", error);
+      setError("Failed to initialize face detection");
+    }
+
+    // Khởi tạo các worker
+    if (handWorkerRef.current) {
+      handWorkerRef.current.postMessage({ type: "initialize" });
+    }
+    
+    if (faceWorkerRef.current) {
+      faceWorkerRef.current.postMessage({ type: "initialize" });
+    }
+
     return () => {
-      if (workerRef.current) {
-        workerRef.current.postMessage({ type: "cleanup" });
-        workerRef.current.terminate();
+      // Cleanup các worker
+      if (handWorkerRef.current) {
+        handWorkerRef.current.postMessage({ type: "cleanup" });
+        handWorkerRef.current.terminate();
+      }
+      if (faceWorkerRef.current) {
+        faceWorkerRef.current.postMessage({ type: "cleanup" });
+        faceWorkerRef.current.terminate();
       }
     };
-  }, [detectFull, isHandDetectionEnabled]);
+  }, [detectFull]);
 
+  // Luồng phát hiện tay
   useEffect(() => {
-    if (!workerRef.current) return;
+    if (!stream || !videoRef.current || !handWorkerRef.current || !isHandWorkerInitialized || !isHandDetectionEnabled) {
+      return;
+    }
 
-    // Lấy model requirements cho view hiện tại
-    const requiredModels = modelRequirements[currentView] || ["hand"];
-
-    // Nếu đang bật hand detection và phát hiện tay => chỉ chạy hand
-    const modelsToRun = (isHandDetectionEnabled && handData.isHandDetected)
-      ? ["hand"]
-      : requiredModels;
-
-    // Cleanup các model không cần thiết
-    const allModels = ["hand", "face", "pose", "hair"];
-    const unusedModels = allModels.filter(m => !modelsToRun.includes(m));
-
-    unusedModels.forEach(modelType => {
-      workerRef.current!.postMessage({
-        type: "cleanup",
-        data: { modelType }
-      });
-    });
-
-    // Khởi tạo các model cần thiết
-    modelsToRun.forEach(modelType => {
-      workerRef.current!.postMessage({
-        type: "initialize",
-        data: { modelType }
-      });
-    });
-
-  }, [currentView, isHandDetectionEnabled, handData.isHandDetected]);
-
-  // Luồng phát hiện chính
-  useEffect(() => {
-    if (!stream || !videoRef.current || !workerRef.current) return;
-
+    console.log("[WebcamProvider] Starting hand detection loop...");
     const video = videoRef.current;
-    const detect = async () => {
+    
+    const handDetect = async () => {
       const now = performance.now();
-
-      // Điều chỉnh FPS: nhanh hơn khi có hand detection
-      const minInterval = (isHandDetectionEnabled && handData.isHandDetected) ? 33 : 100;
-      if (now - lastDetectTime.current < minInterval) {
-        animationFrameId.current = requestAnimationFrame(detect);
+      
+      // Đảm bảo tốc độ khung hình ổn định
+      if (now - lastHandDetectTime.current < HAND_DETECTION_INTERVAL) {
+        handAnimationFrameId.current = requestAnimationFrame(handDetect);
         return;
       }
 
-      lastDetectTime.current = now;
+      lastHandDetectTime.current = now;
 
-      if (video.readyState < 4) {
-        animationFrameId.current = requestAnimationFrame(detect);
+      // Kiểm tra video đã sẵn sàng
+      if (video.readyState < 2) {
+        handAnimationFrameId.current = requestAnimationFrame(handDetect);
         return;
       }
 
       try {
-        const imageBitmap = await createImageBitmap(video);
-
-        // Xác định modelTypes cần chạy
-        const modelTypes = (isHandDetectionEnabled && handData.isHandDetected)
-          ? ["hand"]
-          : modelRequirements[currentView] || ["hand"];
-
-        workerRef.current!.postMessage({
-          type: "detect",
-          data: {
-            imageBitmap,
-            timestamp: now,
-            modelTypes
-          },
-        }, [imageBitmap]);
+        // Tạo bitmap nhỏ hơn để xử lý nhanh hơn - giảm kích thước để tăng FPS
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        // Giảm kích thước cho xử lý nhanh hơn
+        canvas.width = 640;
+        canvas.height = 480;
+        
+        if (ctx) {
+          // Vẽ video lên canvas đã thu nhỏ
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          // Tạo bitmap từ canvas để xử lý nhanh hơn
+          const imageBitmap = await createImageBitmap(canvas);
+          
+          // Gửi đến HandWorker để xử lý
+          handWorkerRef.current!.postMessage({
+            type: "detect",
+            data: {
+              imageBitmap,
+              timestamp: now
+            },
+          }, [imageBitmap]);
+        }
       } catch (err) {
-        console.error("Error creating bitmap:", err);
+        console.error("[WebcamProvider] Error creating bitmap for hand detection:", err);
       }
 
-      animationFrameId.current = requestAnimationFrame(detect);
+      handAnimationFrameId.current = requestAnimationFrame(handDetect);
     };
 
-    detect();
+    handDetect();
 
     return () => {
-      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+      if (handAnimationFrameId.current) {
+        cancelAnimationFrame(handAnimationFrameId.current);
+      }
     };
-  }, [stream, currentView, isHandDetectionEnabled, handData.isHandDetected]);
+  }, [stream, isHandDetectionEnabled, isHandWorkerInitialized]);
 
-  // Luồng phát hiện nhẹ (lightweight detection) để kích hoạt lại khi isHandDetectionEnabled = false
-  // useEffect(() => {
-  //   if (!stream || !videoRef.current || !workerRef.current || isHandDetectionEnabled) {
-  //     console.log("[WebcamProvider] Lightweight detection loop skipped:", {
-  //       hasStream: !!stream,
-  //       hasVideoRef: !!videoRef.current,
-  //       hasWorker: !!workerRef.current,
-  //       isHandDetectionEnabled,
-  //     });
-  //     return;
-  //   }
+  // Luồng phát hiện khuôn mặt (tốc độ thấp hơn)
+  useEffect(() => {
+    const currentModelRequirements = modelRequirements[currentView] || [];
+    // Chỉ chạy face detection nếu cần
+    if (!stream || !videoRef.current || !faceWorkerRef.current || 
+        !isFaceWorkerInitialized || !currentModelRequirements.includes("face")) {
+      return;
+    }
 
-  //   const video = videoRef.current;
-  //   const canvas = document.createElement("canvas");
-  //   canvas.width = 320;
-  //   canvas.height = 240;
-  //   const ctx = canvas.getContext("2d");
+    console.log("[WebcamProvider] Starting face detection loop...");
+    const video = videoRef.current;
+    
+    const faceDetect = async () => {
+      const now = performance.now();
+      
+      // Kiểm soát FPS phát hiện khuôn mặt - thấp hơn tay để tiết kiệm CPU
+      if (now - lastFaceDetectTime.current < FACE_DETECTION_INTERVAL) {
+        faceAnimationFrameId.current = requestAnimationFrame(faceDetect);
+        return;
+      }
 
-  //   const lightweightDetect = () => {
-  //     const now = performance.now();
-  //     if (now - lastLightweightDetectTime.current < 500) { // 2 FPS
-  //       lightweightFrameId.current = requestAnimationFrame(lightweightDetect);
-  //       return;
-  //     }
-  //     lastLightweightDetectTime.current = now;
+      lastFaceDetectTime.current = now;
 
-  //     if (!ctx || video.readyState < 4) {
-  //       console.log("[WebcamProvider] Video not ready for lightweight detection:", {
-  //         ctxExists: !!ctx,
-  //         videoReadyState: video.readyState,
-  //       });
-  //       lightweightFrameId.current = requestAnimationFrame(lightweightDetect);
-  //       return;
-  //     }
+      // Kiểm tra video đã sẵn sàng
+      if (video.readyState < 2) {
+        faceAnimationFrameId.current = requestAnimationFrame(faceDetect);
+        return;
+      }
 
-  //     console.log("[WebcamProvider] Sending frame to worker (lightweight detection)...");
-  //     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  //     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      try {
+        // Tạo bitmap nhỏ hơn cho phát hiện khuôn mặt
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        // Kích thước thấp hơn so với phát hiện tay
+        canvas.width = 256;
+        canvas.height = 192;
+        
+        if (ctx) {
+          // Vẽ video lên canvas đã thu nhỏ
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          // Tạo bitmap từ canvas
+          const imageBitmap = await createImageBitmap(canvas);
+          
+          // Gửi đến FaceWorker để xử lý
+          faceWorkerRef.current!.postMessage({
+            type: "detect",
+            data: {
+              imageBitmap,
+              timestamp: now
+            },
+          }, [imageBitmap]);
+        }
+      } catch (err) {
+        console.error("[WebcamProvider] Error creating bitmap for face detection:", err);
+      }
 
-  //     const modelTypes = ["hand"];
-  //     workerRef.current!.postMessage(
-  //       {
-  //         type: "detect",
-  //         data: {
-  //           imageData,
-  //           timestamp: now,
-  //           modelTypes,
-  //         },
-  //       },
-  //       [imageData.data.buffer]
-  //     );
+      faceAnimationFrameId.current = requestAnimationFrame(faceDetect);
+    };
 
-  //     lightweightFrameId.current = requestAnimationFrame(lightweightDetect);
-  //   };
+    faceDetect();
 
-  //   lightweightDetect();
+    return () => {
+      if (faceAnimationFrameId.current) {
+        cancelAnimationFrame(faceAnimationFrameId.current);
+      }
+    };
+  }, [stream, currentView, modelRequirements, isFaceWorkerInitialized]);
 
-  //   return () => {
-  //     if (lightweightFrameId.current) {
-  //       cancelAnimationFrame(lightweightFrameId.current);
-  //     }
-  //   };
-  // }, [stream, isHandDetectionEnabled]);
+  // Memoize context value
+  const contextValue = useMemo(() => ({
+    stream,
+    videoRef,
+    error,
+    restartStream,
+    handData,
+    setIsHandDetectionEnabled,
+    isIndexFingerRaised,
+    isHandDetectionEnabled,
+    currentView,
+    detectionResults,
+    setCurrentView,
+    cursorRef,
+  }), [
+    stream, 
+    error, 
+    restartStream, 
+    handData, 
+    isIndexFingerRaised, 
+    isHandDetectionEnabled,
+    currentView,
+    detectionResults
+  ]);
 
   return (
-    <WebcamContext.Provider
-      value={{
-        stream,
-        videoRef,
-        error,
-        restartStream,
-        handData,
-        setIsHandDetectionEnabled,
-        isIndexFingerRaised,
-        isHandDetectionEnabled, // Truyền ra để đồng bộ
-        currentView,
-        detectionResults,
-        setCurrentView,
-        cursorRef,
-      }}
-    >
+    <WebcamContext.Provider value={contextValue}>
       {children}
-      <video ref={videoRef} className="hidden" />
+      <video 
+        ref={videoRef} 
+        className="hidden" 
+        playsInline 
+        muted
+      />
+      {/* Thêm CSS cho cursor */}
+      <style jsx global>{`
+        .hidden {
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+        
+        .cursor {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 24px;
+          height: 24px;
+          background: rgba(255, 0, 150, 0.5);
+          border-radius: 50%;
+          pointer-events: none;
+          z-index: 9999;
+          transform: translate(-50%, -50%);
+          box-shadow: 0 0 8px rgba(255, 0, 150, 0.8);
+          transition: transform 0.05s cubic-bezier(0.17, 0.67, 0.83, 0.67),
+                      width 0.15s ease, height 0.15s ease,
+                      background-color 0.2s ease;
+          will-change: transform, width, height;
+        }
+        
+        .cursor.fist {
+          background: rgba(255, 100, 0, 0.7);
+          width: 32px;
+          height: 32px;
+          box-shadow: 0 0 12px rgba(255, 100, 0, 0.8);
+        }
+        
+        .cursor.open-hand {
+          background: rgba(0, 200, 150, 0.7);
+          width: 40px;
+          height: 40px;
+          box-shadow: 0 0 12px rgba(0, 200, 150, 0.8);
+        }
+      `}</style>
     </WebcamContext.Provider>
   );
 };

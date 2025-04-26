@@ -1,0 +1,32 @@
+Sure, here's the contents for the file: `.github/workflows/sync-fork.yml`
+
+name: Sync Fork
+
+on:
+  push:
+    branches:
+      - dual-mediapipe-main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config --global user.name "sova-tungnv"
+          git config --global user.email "nvtung@marusysvina.com"
+
+      - name: Fetch upstream changes
+        run: |
+          git remote add upstream https://github.com/Humax-Viet-Nam/web-ai.git
+          git fetch upstream
+          git merge upstream/dual-mediapipe-main
+
+      - name: Push changes to fork
+        run: |
+          git push origin dual-mediapipe-main --force

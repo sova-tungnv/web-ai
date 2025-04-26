@@ -114,11 +114,7 @@ const AnalysisLayout = memo(
               />
             </div>
           </div>
-          {selectionButtons && (<div className="md:w-2/12 p-1 rounded-xl flex flex-col max-h-[calc(100vh-64px)] overflow-hidden">
-              <div className="flex flex-col flex-wrap gap-3 w-full h-full">
-                {selectionButtons}
-              </div>
-          </div>)}
+          {selectionButtons && (<>{selectionButtons}</>)}
           {/* Results Container */}
           <div
             className={`${

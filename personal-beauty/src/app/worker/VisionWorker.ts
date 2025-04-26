@@ -69,22 +69,23 @@ const handleDetect = async () => {
     const results: { [key: string]: any } = {};
 
     // Ưu tiên hand detection nếu có
-     // Always prioritize hand detection
-     const handDetected = modelTypes.includes("hand") && models.has("hand");
-     if (handDetected) {
-       results.hand = await models.get("hand").detectForVideo(imageBitmap, timestamp);
-     }
- 
-     const shouldRunOthers = !handDetected || (results.hand?.landmarks?.length > 0);
-     if (shouldRunOthers) {
-       const otherModels = modelTypes.filter((m: any) => m !== "hand");
-       await Promise.all(otherModels.map(async (modelType: any) => {
-         if (models.has(modelType)) {
-           results[modelType] = await models.get(modelType).detectForVideo(imageBitmap, timestamp);
-         }
-       }));
-     }
- 
+    // Always prioritize hand detection
+    const handDetected = modelTypes.includes("hand") && models.has("hand");
+    if (handDetected) {
+      results.hand = await models.get("hand").detectForVideo(imageBitmap, timestamp);
+    } else {
+      results.hand = { landmarks: [] }; // Gửi kết quả rỗng nếu không phát hiện tay
+    }
+
+    const otherModels = modelTypes.filter((m: string) => m !== "hand");
+    if (otherModels.length > 0) {
+      await Promise.all(otherModels.map(async (modelType: string) => {
+        if (models.has(modelType)) {
+          results[modelType] = await models.get(modelType).detectForVideo(imageBitmap, timestamp);
+        }
+      }));
+    }
+
     self.postMessage({ type: "detectionResult", results });
   } catch (err: any) {
     console.error("Detection error:", err);

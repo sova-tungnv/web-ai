@@ -5,12 +5,11 @@
 "use client";
 
 import React from "react";
-import { useState, useEffect, useRef, useMemo } from "react";
-import { FaceLandmarker, FilesetResolver, NormalizedLandmark } from "@mediapipe/tasks-vision";
+import { useState, useEffect, useRef } from "react";
+import { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import AnalysisLayout from "../components/AnalysisLayout";
 import { useWebcam } from "../context/WebcamContext";
 import { useLoading } from "../context/LoadingContext";
-import { useHandControl } from "../context/HandControlContext";
 import { VIEWS } from "../constants/views";
 
 export default function CosmeticSurgery() {
@@ -22,16 +21,14 @@ export default function CosmeticSurgery() {
         setCurrentView,
     } = useWebcam();
     const { setIsLoading } = useLoading();
-    const [colorTone, setColorTone] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isVideoReady, setIsVideoReady] = useState(false);
-    const [selectedArea, setSelectedArea] = useState<string | null>(null);
-    const [selectedColor, setSelectedColor] = useState<string | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const animationFrameId = useRef<number | null>(null);
     const lastDetectTime = useRef(0);
     const [result, setResult] = useState<string | null>(null);
+    const [topPoint, setTopPoint] = useState<NormalizedLandmark | null>(null);
   
     useEffect(() => {
         setCurrentView(VIEWS.COSMETIC_SURGERY)
@@ -50,7 +47,7 @@ export default function CosmeticSurgery() {
                 setIsLoading(false);
             };
         }
-    }, [stream, setIsLoading]);
+    }, [stream, setIsLoading, restartStream]);
 
   useEffect(() => {
     if (!stream || !canvasRef.current || !videoRef.current || !isVideoReady) {

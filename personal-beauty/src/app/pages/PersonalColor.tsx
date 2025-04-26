@@ -110,11 +110,6 @@ export default function PersonalColor() {
         ],
     };
 
-    useEffect(() => {
-        setCurrentView(VIEWS.PERSONAL_COLOR);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     const selectionButtons = useMemo(
         () => (
             <div className="flex gap-6">
@@ -168,6 +163,11 @@ export default function PersonalColor() {
         ),
         []
     );
+
+    useEffect(() => {
+        setCurrentView(VIEWS.PERSONAL_COLOR);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Kết nối video stream
     useEffect(() => {
@@ -224,7 +224,7 @@ export default function PersonalColor() {
     // Xử lý vẽ video, phân tích tông màu, và vẽ landmarks
     useEffect(() => {
         if (!stream || !canvasRef.current || !displayVideoRef.current || !isVideoReady) {
-            console.log("[PersonalColor] Waiting for FaceLandmarker or webcam...");
+            console.log("[PersonalColor] Waiting for FaceLandmarker or webcam...", stream, canvasRef.current, displayVideoRef.current, isVideoReady);
             return;
         }
 

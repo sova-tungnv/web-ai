@@ -58,6 +58,15 @@ const modelConfigs: { [key: string]: any } = {
 let filesetResolver: any = null;
 let isDetecting = false;
 const frameQueue: any = [];
+const MAX_QUEUE_SIZE = 5; // Tăng kích thước hàng đợi để tránh bỏ sót khung hình
+const MAX_PROCESSING_TIME = 30; // Giới hạn thời gian xử lý mỗi khung (ms)
+
+// Kiểm tra ngón trỏ có được giơ ra không
+const isIndexRaised = (landmarks: any[]): boolean => {
+  const THRESHOLD = 0.1;
+  if (!landmarks || landmarks.length < 9) return false;
+  return landmarks[8].y < landmarks[5].y - THRESHOLD;
+};
 
 // Thêm logic xử lý ưu tiên
 const handleDetect = async () => {
@@ -67,23 +76,32 @@ const handleDetect = async () => {
 
   try {
     const results: { [key: string]: any } = {};
+    let indexRaised = false;
 
     // Ưu tiên hand detection nếu có
     // Always prioritize hand detection
-    const handDetected = modelTypes.includes("hand") && models.has("hand");
-    if (handDetected) {
-      results.hand = await models.get("hand").detectForVideo(imageBitmap, timestamp);
+    if (modelTypes.includes("hand") && models.has("hand")) {
+      const handResult = await models.get("hand").detectForVideo(imageBitmap, timestamp);
+      results.hand = handResult || { landmarks: [] };
+
+      if (handResult?.landmarks?.length > 0) {
+        indexRaised = isIndexRaised(handResult.landmarks[0]);
+        results.hand.isIndexRaised = indexRaised;
+      } else {
+        results.hand.isIndexRaised = false;
+      }
     } else {
-      results.hand = { landmarks: [] }; // Gửi kết quả rỗng nếu không phát hiện tay
+      results.hand = { landmarks: [], isIndexRaised: false };
     }
 
-    const otherModels = modelTypes.filter((m: string) => m !== "hand");
-    if (otherModels.length > 0) {
-      await Promise.all(otherModels.map(async (modelType: string) => {
+     // ---- Phase 2: Only detect other models if indexFinger not raised ----
+     if (!indexRaised) {
+      const otherModels = modelTypes.filter((m: string) => m !== "hand");
+      for (const modelType of otherModels) {
         if (models.has(modelType)) {
           results[modelType] = await models.get(modelType).detectForVideo(imageBitmap, timestamp);
         }
-      }));
+      }
     }
 
     self.postMessage({ type: "detectionResult", results });
@@ -118,7 +136,7 @@ self.onmessage = async (e: MessageEvent) => {
         const { class: ModelClass, options } = modelConfigs[modelType];
         models.set(modelType, await ModelClass.createFromOptions(filesetResolver, options));
       }
-
+      console.log(`[VisionWorker] Model ${modelType} initialized successfully.`);
       self.postMessage({ type: "initialized", success: true, modelType });
     } catch (err) {
       self.postMessage({ type: "initialized", success: false, modelType, error: (err as Error).message });
@@ -128,7 +146,7 @@ self.onmessage = async (e: MessageEvent) => {
 
   if (type === "detect") {
     const { imageBitmap, timestamp, modelTypes } = data;
-    if (frameQueue.length >= 2) {
+    if (frameQueue.length >= MAX_QUEUE_SIZE) {
       const dropped = frameQueue.shift();
       dropped?.imageBitmap?.close();
     }

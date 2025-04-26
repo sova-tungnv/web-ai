@@ -70,36 +70,27 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [VIEWS.COSMETIC_SURGERY]: ["face", "pose"],
   };
 
-  // Hàm chỉ kiểm tra ngón trỏ (dùng cho luồng lightweight detection)
-  const detectIndexFinger = useCallback((landmarks: any[]) => {
-    const THRESHOLD = 0.05;
-    const isIndexRaised = landmarks[8].y < landmarks[5].y - THRESHOLD;
-    return isIndexRaised;
-  }, []);
-
   // Hàm kiểm tra cử chỉ tay (dùng cho luồng full detection)
   const detectGesture = useCallback((landmarks: any[]) => {
     const THRESHOLD = 0.1;
-    const FIST_DISTANCE_THRESHOLD = 0.15; // Ngưỡng cho ngón trỏ cụp chặt
-   // Tính khoảng cách Euclidean giữa đầu ngón trỏ và đốt giữa
-   const distanceIndex = Math.hypot(landmarks[8].x - landmarks[5].x, landmarks[8].y - landmarks[5].y);
-   // Kiểm tra độ cao tương đối để xác định ngón trỏ có cụp vào lòng bàn tay không
-   const isIndexFolded = landmarks[8].y > landmarks[5].y; // Đầu ngón trỏ thấp hơn đốt giữa
-   // Chỉ yêu cầu ngón trỏ cụp chặt và ở vị trí thấp
-   const isFist = distanceIndex < FIST_DISTANCE_THRESHOLD && isIndexFolded;
-   const isOpenHand =
-     landmarks[8].y < landmarks[5].y - THRESHOLD &&
-     landmarks[12].y < landmarks[9].y - THRESHOLD &&
-     landmarks[16].y < landmarks[13].y - THRESHOLD &&
-     landmarks[20].y < landmarks[17].y - THRESHOLD;
+    const FIST_DISTANCE_THRESHOLD = 0.15;
 
-   const isIndexRaised = landmarks[8].y < landmarks[5].y - THRESHOLD;
-   return { isFist, isOpenHand, isIndexRaised };
+    const distanceIndex = Math.hypot(landmarks[8].x - landmarks[5].x, landmarks[8].y - landmarks[5].y);
+    const isIndexFolded = landmarks[8].y > landmarks[5].y;
+    const isFist = distanceIndex < FIST_DISTANCE_THRESHOLD && isIndexFolded;
+
+    const isOpenHand =
+      landmarks[8].y < landmarks[5].y - THRESHOLD &&
+      landmarks[12].y < landmarks[9].y - THRESHOLD &&
+      landmarks[16].y < landmarks[13].y - THRESHOLD &&
+      landmarks[20].y < landmarks[17].y - THRESHOLD;
+
+    return { isFist, isOpenHand };
   }, []);
 
   // Hàm phát hiện cử chỉ tay và vị trí con trỏ (dùng cho luồng full detection)
-  const detectFull = useCallback((landmarks: any[]) => {
-    const { isFist, isOpenHand, isIndexRaised } = detectGesture(landmarks);
+  const detectFull = useCallback((landmarks: any[], isIndexRaised: boolean) => {
+    const { isFist, isOpenHand } = detectGesture(landmarks);
     const indexFingerTip = landmarks[8];
     const videoWidth = 320;
     const videoHeight = 240;
@@ -187,9 +178,11 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (type === "detectionResult") {
         if (results?.hand?.landmarks?.length > 0) {
           const landmarks = results.hand.landmarks[0];
-          const detected = detectFull(landmarks);
+          const isIndexRaised = results.hand.isIndexRaised || false;
+          const detected = detectFull(landmarks, isIndexRaised);
           setHandData(detected);
           setDetectionResults(results);
+          setIsIndexFingerRaised(isIndexRaised);
           if (cursorRef.current && isHandDetectionEnabled) {
             cursorRef.current.style.transform = `translate(${detected.cursorPosition.x}px, ${detected.cursorPosition.y}px)`;
           }

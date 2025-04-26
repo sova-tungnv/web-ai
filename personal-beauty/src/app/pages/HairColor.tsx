@@ -2,11 +2,15 @@
 // src/pages/PersonalColor.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useWebcam } from "../context/WebcamContext";
 import { useLoading } from "../context/LoadingContext";
 import { VIEWS } from "../constants/views";
 import { useHandControl } from "../context/HandControlContext";
+import AnalysisLayout from "../components/AnalysisLayout";
+import HairContent from "../components/hair/HairContent";
+import HairResult from "../components/hair/HairResult";
+import HairSelection from "../components/hair/HairSelection";
 
 export default function HairColor() {
   const { stream, setCurrentView } = useWebcam();
@@ -26,29 +30,30 @@ export default function HairColor() {
   const ctxRef = useRef<any>(null);
   const isVideoReady = useRef(false);
   const scrollContainerRef: any = useRef(null) ;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [hairColorList, _setHairColorList] = useState<any[]>([
-    { name: "Jet Black", rgb: [10, 10, 10] },
-    { name: "Soft Black", rgb: [40, 30, 30] },
-    { name: "Dark Brown", rgb: [60, 40, 30] },
-    { name: "Chestnut Brown", rgb: [90, 60, 40] },
-    { name: "Chocolate Brown", rgb: [120, 80, 60] },
-    { name: "Toffee Brown", rgb: [150, 100, 80] },
-    { name: "Caramel Brown", rgb: [170, 120, 80] },
-    { name: "Light Brown", rgb: [200, 140, 90] },
-    { name: "Golden Bronze", rgb: [220, 160, 60] },
-    { name: "Golden Yellow", rgb: [255, 197, 0] },
-    { name: "Copper Orange", rgb: [255, 130, 60] },
-    { name: "Auburn", rgb: [170, 60, 60] },
-    { name: "Burgundy", rgb: [120, 30, 50] },
-    { name: "Mahogany", rgb: [160, 40, 90] },
-    { name: "Scarlet Red", rgb: [220, 40, 60] },
-    { name: "Magenta", rgb: [180, 60, 120] },
-    { name: "Ash Gray", rgb: [180, 180, 180] },
-    { name: "Platinum Blonde", rgb: [245, 245, 245] },
-    { name: "Olive Green", rgb: [100, 120, 90] },
-    { name: "Cool Gray", rgb: [130, 130, 130] },
+    { key: "0", name: "Jet Black", rgb: [10, 10, 10] },
+    { key: "1", name: "Soft Black", rgb: [40, 30, 30] },
+    { key: "2", name: "Dark Brown", rgb: [60, 40, 30] },
+    { key: "3", name: "Chestnut Brown", rgb: [90, 60, 40] },
+    { key: "4", name: "Chocolate Brown", rgb: [120, 80, 60] },
+    { key: "5", name: "Toffee Brown", rgb: [150, 100, 80] },
+    { key: "6", name: "Caramel Brown", rgb: [170, 120, 80] },
+    { key: "7", name: "Light Brown", rgb: [200, 140, 90] },
+    { key: "8", name: "Golden Bronze", rgb: [220, 160, 60] },
+    { key: "9", name: "Golden Yellow", rgb: [255, 197, 0] },
+    { key: "10", name: "Copper Orange", rgb: [255, 130, 60] },
+    { key: "11", name: "Auburn", rgb: [170, 60, 60] },
+    { key: "12", name: "Burgundy", rgb: [120, 30, 50] },
+    { key: "13", name: "Mahogany", rgb: [160, 40, 90] },
+    { key: "14", name: "Scarlet Red", rgb: [220, 40, 60] },
+    { key: "15", name: "Magenta", rgb: [180, 60, 120] },
+    { key: "16", name: "Ash Gray", rgb: [180, 180, 180] },
+    { key: "17", name: "Platinum Blonde", rgb: [245, 245, 245] },
+    { key: "18", name: "Olive Green", rgb: [100, 120, 90] },
+    { key: "19", name: "Cool Gray", rgb: [130, 130, 130] },
   ]);
-  const [selectedHair, setSelectedHair] = useState<any>(null);
+  const [filterHair, setSelectedHair] = useState<any>(null);
   const scrollByAmount = 480;
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const { registerElement, unregisterElement, isHandDetectionEnabled } = useHandControl();
@@ -221,7 +226,12 @@ export default function HairColor() {
             });
         };
     }
-}, [stream, setIsLoading]);
+  }, [stream, setIsLoading]);
+
+  const onChangeSelectHair = useCallback((color: any) => {
+    selectedHairColor.current = color.rgb;
+    setSelectedHair(color.key);
+  }, []);
 
   const detectHair = (result?: any) => {
     try {
@@ -279,7 +289,7 @@ export default function HairColor() {
 
         ctxRef.current.putImageData(imageData, 0, 0);
         if (hairPixelIndices.length === 0) {
-          setMakeupSuggestion("Không thể phát hiện màu tóc.");
+          setMakeupSuggestion("Hair color cannot be detected.");
           return;
         }
 
@@ -333,99 +343,20 @@ export default function HairColor() {
   return (
     <div className="flex flex-col gap-8 h-full min-h-[calc(100vh-2rem)] p-4 md:p-8 overflow-hidden bg-gradient-to-r from-pink-100 to-purple-100">
       <div className="flex flex-col md:flex-row gap-3 md:gap-3 flex-1 overflow-hidden">
-        <div className="md:w-7/12 px-6 md:px-2 rounded-xl flex flex-col items-center">
-          <div
-            className="relative w-full overflow-hidden rounded-2xl shadow-lg border-2 border-gray-200 bg-white"
-            style={{ paddingTop: "75%" /* 480/640 = 0.75 */ }}
-          >
-            <video
-              ref={displayVideoRef}
-              className="absolute inset-0 w-full h-full object-cover"
-              autoPlay
-              playsInline
-              muted
-            />
-            <canvas
-              ref={canvasRef}
-              width={640}
-              height={480}
-              className="absolute inset-0 w-full object-contain pointer-events-none"
-            />
-          </div>
-        </div>
-        <div className="md:w-2/12 bg-white p-4 md:p-6 rounded-xl shadow-md flex flex-col max-h-[calc(100vh-64px)] overflow-hidden">
-        <button
-            onClick={handleScrollUp}
-            ref={(el) => {
-              buttonRefs.current[0] = el;
-            }}
-            className="my-2 text-[50px] text-[#db2777] flex items-center min-h-[120px] justify-center gap-4 border rounded-lg shadow-sm hover:shadow-md transition-shadow"
-        >↑</button>
-
-        <div
-            ref={scrollContainerRef}
-            className="hide-scrollbar flex flex-col gap-6 flex-1 max-w-full overflow-y-auto flex-nowrap mb-1 pb-1"
-        >
-            {hairColorList.map((color, index) => (
-            <button
-                key={color.name}
-                className={`flex items-center border-4 min-h-[120px] justify-center gap-4 rounded-lg shadow-sm hover:shadow-md transition-shadow
-                  ${selectedHair === color.rgb ? "border-[#db2777]" : ""}
-                `}
-                ref={(el) => {
-                  buttonRefs.current[index + 2] = el;
-                }}
-                onClick={() => {
-                    selectedHairColor.current = color.rgb;
-                    setSelectedHair(color.rgb);
-                }}
-            >
-                <div
-                className="w-8 h-8 rounded-full"
-                style={{
-                    backgroundColor: `rgb(${color.rgb[0]}, ${color.rgb[1]}, ${color.rgb[2]})`,
-                }}
-                ></div>
-                <span className="text-gray-700 font-medium">{color.name}</span>
-            </button>
-            ))}
-        </div>
-
-        <button
-            onClick={handleScrollDown}
-            ref={(el) => {
-              buttonRefs.current[1] = el;
-            }}
-            className="mt-2 text-[50px] text-[#db2777] flex items-center min-h-[120px] justify-center gap-4 border rounded-lg shadow-sm hover:shadow-md transition-shadow"
-        >↓</button>
-        </div>
-        <div className="md:w-3/12 bg-white p-4 md:p-6 rounded-xl shadow-md flex flex-col max-h-[calc(100vh-64px)] overflow-hidden">
-          <div className="mb-4">
-            <h5 className="text-2xl md:text-3xl font-bold text-pink-600">
-              Hair Color
-            </h5>
-            <p className="text-sm md:text-base text-gray-500 mt-2">
-              Detect and segment hair regions in video.
-            </p>
-          </div>
-          <hr className="border-gray-200 mb-4" />
-          <h2 className="text-xl md:text-2xl font-semibold text-gray-800 mb-4">
-            Analysis Result
-          </h2>
-          {makeupSuggestion ? (
-            <div className="text-lg md:text-xl text-gray-700 mb-4">
-              Your result is
-              <span className="font-bold text-pink-600">
-                <div>{makeupSuggestion}</div>
-              </span>
-              .
-            </div>
-          ) : (
-            <p className="text-lg md:text-xl text-gray-500 animate-pulse mb-4">
-              Waiting for analysis...
-            </p>
-          )}
-        </div>
+        <HairContent
+          videoRef={displayVideoRef}
+          canvasRef={canvasRef}
+        />
+        <HairSelection
+            handleScrollUp={handleScrollUp}
+            buttonRefs={buttonRefs}
+            scrollContainerRef={scrollContainerRef}
+            hairColorList={hairColorList}
+            filterHair={filterHair}
+            onChangeSelectHair={onChangeSelectHair}
+            handleScrollDown={handleScrollDown}
+        />
+        <HairResult title="Hair Color" description="Detect and segment hair regions in video." makeupSuggestion={makeupSuggestion} />
       </div>
     </div>
   );

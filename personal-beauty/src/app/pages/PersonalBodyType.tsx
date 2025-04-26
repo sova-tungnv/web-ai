@@ -117,10 +117,14 @@ export default function PersonalBodyType() {
 
   const selectionButtons = useMemo(
     () => (
-      <div className="flex flex-col gap-6">
-        {areas.map((area) => (
-          <SelectionButton key={area} area={area} selectedArea={selectedArea} setSelectedArea={setSelectedArea} />
-        ))}
+      <div className="md:w-2/12 p-1 rounded-xl flex flex-col max-h-[calc(100vh-64px)] overflow-hidden">
+        <div className="flex flex-col flex-wrap gap-3 w-full h-full">
+          <div className="flex flex-col gap-6">
+            {areas.map((area) => (
+              <SelectionButton key={area} area={area} selectedArea={selectedArea} setSelectedArea={setSelectedArea} />
+            ))}
+          </div>
+        </div>
       </div>
     ),
     [selectedArea, setSelectedArea]

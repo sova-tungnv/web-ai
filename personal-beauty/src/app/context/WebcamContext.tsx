@@ -4,8 +4,7 @@
 "use client";
 
 import React, { RefObject, createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
-import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
-import { ViewType, VIEWS } from "../constants/views";
+import { VIEWS } from "../constants/views";
 
 interface HandData {
   isHandDetected: boolean;
@@ -46,7 +45,6 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const videoRef = useRef<HTMLVideoElement>(null);
   const workerRef = useRef<Worker | null>(null);
   const animationFrameId = useRef<number | null>(null);
-  const lightweightFrameId = useRef<number | null>(null);
   const lastDetectTime = useRef(0);
   const lastPositionBeforeFist = useRef<{ x: number; y: number } | null>(null);
   const smoothPosition = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -67,7 +65,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [VIEWS.HOME]: ["hand"],
     [VIEWS.HAIR_COLOR]: ["hand"],
     [VIEWS.PERSONAL_MAKEUP]: ["hand"],
-    [VIEWS.COSMETIC_SURGERY]: ["face", "pose"],
+    [VIEWS.COSMETIC_SURGERY]: ["hand", "face"],
   };
 
   // Hàm kiểm tra cử chỉ tay (dùng cho luồng full detection)

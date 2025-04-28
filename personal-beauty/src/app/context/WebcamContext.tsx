@@ -90,6 +90,17 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Hàm phát hiện cử chỉ tay và vị trí con trỏ (dùng cho luồng full detection)
   const detectFull = useCallback((landmarks: any[], isIndexRaised: boolean) => {
+    if (!landmarks || landmarks.length < 9) {
+      // Không đủ điểm landmark -> Không có tay
+      return {
+        isHandDetected: false,
+        cursorPosition: { x: 0, y: 0 },
+        isFist: false,
+        isOpenHand: false,
+        isIndexRaised: false,
+      };
+    }
+
     const { isFist, isOpenHand } = detectGesture(landmarks);
     const indexFingerTip = landmarks[8];
     const videoWidth = 320;
@@ -236,7 +247,15 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const now = performance.now();
 
       // Điều chỉnh FPS: nhanh hơn khi có hand detection
-      const minInterval = (isHandDetectionEnabled && isIndexFingerRaised) ? 33 : 100;
+      let minInterval = 100;
+      if (isHandDetectionEnabled) {
+        if (isIndexFingerRaised)
+          minInterval = 33;
+        else minInterval = 66;
+      } else {
+        minInterval = 125;
+      }
+
       if (now - lastDetectTime.current < minInterval) {
         animationFrameId.current = requestAnimationFrame(detect);
         return;

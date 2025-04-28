@@ -35,15 +35,17 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
   const { isHandDetectionEnabled, setIsHandDetectionEnabled, cursorRef } = useWebcam();
   const fistDebounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const isClickPending = useRef(false);
-  const lastFistState = useRef(false);
   const lastProcessedPosition = useRef<{ x: number; y: number } | null>(null);
   const elements = useRef<Set<Element>>(new Set());
-  const animationFrameId = useRef<number | null>(null);
-  const lastDetectTime = useRef<number>(0);
   const lastHandData = useRef(handData);
   const openHandStartTime = useRef<number | null>(null);
-
+  const smoothPosition = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const cursorTarget = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const lastStableCursorPosition = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const lastIsFist = useRef(false);
   const handDataRef = useRef(handData);
+
+  const ALPHA = 0.2;
   useEffect(() => {
     handDataRef.current = handData;
   }, [handData]);
@@ -87,14 +89,12 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
     if (!isHandDetectionEnabled || !isHandDetected || !isFist || isClickPending.current) return;
 
     isClickPending.current = true;
-    lastFistState.current = true;
 
     fistDebounceTimeout.current = setTimeout(() => {
       const clicked = getElementAtCursor(cursorPosition);
       if (clicked) {
         clicked.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
       }
-      lastFistState.current = false;
       isClickPending.current = false;
     }, 200);
   }, [isHandDetectionEnabled]);
@@ -120,29 +120,46 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
 
   useEffect(() => {
     const detectLoop = () => {
-      const now = performance.now();
-      const minInterval = handDataRef.current.isHandDetected ? 33 : 100;
-      if (now - lastDetectTime.current < minInterval) {
-        animationFrameId.current = requestAnimationFrame(detectLoop);
-        return;
-      }
-
-      lastDetectTime.current = now;
       handleHandDetection();
-      animationFrameId.current = requestAnimationFrame(detectLoop);
+      requestAnimationFrame(detectLoop);
     };
-
-    animationFrameId.current = requestAnimationFrame(detectLoop);
+    requestAnimationFrame(detectLoop);
     return () => {
-      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
       if (fistDebounceTimeout.current) clearTimeout(fistDebounceTimeout.current);
     };
   }, [handleHandDetection]);
 
   useEffect(() => {
+    const animateCursor = () => {
+      const { cursorPosition, isFist, isHandDetected } = handDataRef.current;
+
+      if (isFist) {
+        if (!lastIsFist.current) {
+          lastStableCursorPosition.current = cursorPosition;
+        }
+        cursorTarget.current = lastStableCursorPosition.current;
+      } else {
+        cursorTarget.current = cursorPosition;
+      }
+
+      lastIsFist.current = isFist;
+
+      smoothPosition.current.x += (cursorTarget.current.x - smoothPosition.current.x) * ALPHA;
+      smoothPosition.current.y += (cursorTarget.current.y - smoothPosition.current.y) * ALPHA;
+
+      if (cursorRef.current) {
+        cursorRef.current.style.transform = `translate(${smoothPosition.current.x}px, ${smoothPosition.current.y}px)`;
+        cursorRef.current.style.opacity = isHandDetected ? "1" : "0";
+      }
+
+      requestAnimationFrame(animateCursor);
+    };
+    animateCursor();
+  }, []);
+
+  useEffect(() => {
     if (!handData.isHandDetected) {
       elements.current.forEach((item) => item.classList.remove("hover"));
-      lastFistState.current = false;
       isClickPending.current = false;
       lastProcessedPosition.current = null;
       if (fistDebounceTimeout.current) {
@@ -182,13 +199,20 @@ export const HandControlProvider: React.FC<HandControlProviderProps> = ({ childr
       {handDataRef.current.isHandDetected && isHandDetectionEnabled && (
         <div
           ref={cursorRef}
-          className={`absolute w-8 h-8 rounded-full bg-pink-500 border-4 border-white pointer-events-none z-[100] transition-all duration-100 ${isLoading ? "opacity-0" : "opacity-100"}`}
+          className="absolute w-8 h-8 rounded-full pointer-events-none z-[100]"
           style={{
-            transform: `translate(${handDataRef.current.cursorPosition.x}px, ${handDataRef.current.cursorPosition.y}px)`,
-            backgroundColor: handDataRef.current.isFist ? "#28a745" : "#ff69b4", // Đổi màu con trỏ khi fist
+            background: handData.isFist
+              ? "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,105,135,0.7) 50%, rgba(255,105,135,0) 80%)"
+              : "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,182,193,0.7) 50%, rgba(255,182,193,0) 80%)",
+            boxShadow: "0 0 10px rgba(255,182,193,0.8), 0 0 20px rgba(255,182,193,0.6)",
+            width: "24px",
+            height: "24px",
+            opacity: handData.isHandDetected ? 1 : 0,
+            transition: "opacity 0.3s ease",
           }}
         />
       )}
+
     </HandControlContext.Provider>
   );
 };

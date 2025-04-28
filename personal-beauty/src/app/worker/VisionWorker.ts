@@ -68,6 +68,11 @@ const handleDetect = async () => {
   if (isDetecting || frameQueue.length === 0) return;
 
   const { imageBitmap, timestamp, modelTypes } = frameQueue.shift()!;
+   // Clear các frame cũ
+   while (frameQueue.length > 0) {
+    const dropped = frameQueue.shift();
+    dropped?.imageBitmap?.close();
+  }
   isDetecting = true;
   console.log(`[VisionWorker] Start detect at ${timestamp}, modelTypes: ${modelTypes.join(", ")}`);
 

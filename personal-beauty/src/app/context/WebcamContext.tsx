@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/context/WebcamContext.tsx
+// Thêm state mới để theo dõi việc phát hiện tay
 
 "use client";
 
@@ -25,8 +25,10 @@ interface WebcamContextType {
   isHandDetectionEnabled: boolean;
   detectionResults: { [key: string]: any };
   currentView: string;
-  setCurrentView: (view: string) => void; // Đã sửa kiểu dữ liệu
+  setCurrentView: (view: string) => void;
   cursorRef: RefObject<HTMLDivElement>;
+  // Thêm một property mới để kiểm soát face detection và filter
+  isHandActive: boolean;
 }
 
 // Các hằng số cho xử lý mượt mà
@@ -101,6 +103,9 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Worker states
   const [isHandWorkerInitialized, setIsHandWorkerInitialized] = useState(false);
   const [isFaceWorkerInitialized, setIsFaceWorkerInitialized] = useState(false);
+  
+  // Thêm state mới để theo dõi tay có được phát hiện hay không
+  const [isHandActive, setIsHandActive] = useState(false);
   
   // Sử dụng useMemo để tránh tính toán lại
   const modelRequirements = useMemo(() => ({
@@ -219,6 +224,9 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         cursorRef.current.classList.remove('open-hand');
       }
     }
+
+    // Cập nhật state isHandActive khi phát hiện tay
+    setIsHandActive(true);
 
     return handDataRef.current;
   }, [detectGesture, baseAlpha]);
@@ -349,6 +357,11 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const landmarks = results.hand.landmarks[0];
             const detected = detectFull(landmarks);
             setIsIndexFingerRaised(detected.isOpenHand);
+            
+            // Hiển thị con trỏ khi phát hiện tay
+            if (cursorRef.current) {
+              cursorRef.current.classList.remove('hidden');
+            }
           } else {
             // Không phát hiện tay
             handDataRef.current = {
@@ -361,6 +374,9 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (cursorRef.current) {
               cursorRef.current.classList.add('hidden');
             }
+            
+            // Đặt isHandActive thành false khi không phát hiện tay
+            setIsHandActive(false);
           }
           
           // Chỉ cập nhật detection results khi thực sự có thay đổi
@@ -504,12 +520,13 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [stream, isHandDetectionEnabled, isHandWorkerInitialized]);
 
-  // Luồng phát hiện khuôn mặt (tốc độ thấp hơn)
+  // Luồng phát hiện khuôn mặt (tốc độ thấp hơn) - CHỈ CHẠY KHI KHÔNG PHÁT HIỆN TAY
   useEffect(() => {
     const currentModelRequirements = modelRequirements[currentView] || [];
-    // Chỉ chạy face detection nếu cần
+    // Chỉ chạy face detection nếu cần VÀ không phát hiện tay (isHandActive === false)
     if (!stream || !videoRef.current || !faceWorkerRef.current || 
-        !isFaceWorkerInitialized || !currentModelRequirements.includes("face")) {
+        !isFaceWorkerInitialized || !currentModelRequirements.includes("face") || 
+        isHandActive) { // Thêm điều kiện isHandActive
       return;
     }
 
@@ -572,7 +589,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         cancelAnimationFrame(faceAnimationFrameId.current);
       }
     };
-  }, [stream, currentView, modelRequirements, isFaceWorkerInitialized]);
+  }, [stream, currentView, modelRequirements, isFaceWorkerInitialized, isHandActive]); // Thêm isHandActive vào dependencies
 
   // Memoize context value
   const contextValue = useMemo(() => ({
@@ -588,6 +605,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     detectionResults,
     setCurrentView,
     cursorRef,
+    isHandActive, // Thêm vào context value
   }), [
     stream, 
     error, 
@@ -596,7 +614,8 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     isIndexFingerRaised, 
     isHandDetectionEnabled,
     currentView,
-    detectionResults
+    detectionResults,
+    isHandActive // Thêm vào dependencies
   ]);
 
   return (
@@ -607,6 +626,10 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         className="hidden" 
         playsInline 
         muted
+      />
+      <div 
+        ref={cursorRef}
+        className="cursor hidden"
       />
       {/* Thêm CSS cho cursor */}
       <style jsx global>{`

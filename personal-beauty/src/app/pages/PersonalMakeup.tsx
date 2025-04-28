@@ -29,7 +29,12 @@ type FacialFeatures = {
 };
 
 export default function PersonalColor() {
-    const { stream, error: webcamError, restartStream } = useWebcam();
+    const { 
+        stream, 
+        error: webcamError, 
+        restartStream,
+        isHandActive // Thêm isHandActive từ context
+    } = useWebcam();
     const { setIsLoading } = useLoading(); // Sử dụng context
     const { registerElement, unregisterElement } = useHandControl();
     const [error, setError] = useState<string | null>(null);
@@ -50,6 +55,20 @@ export default function PersonalColor() {
     // Thêm refs để lưu kết quả phát hiện gần nhất
     const lastLandmarksRef = useRef<NormalizedLandmark[] | null>(null);
     const lastAnalysisTime = useRef(0);
+
+    // Cập nhật thông báo trạng thái dựa trên isHandActive
+    useEffect(() => {
+        if (isHandActive) {
+            // Khi phát hiện tay, hiển thị thông báo phù hợp
+            setStatusMessage("Hand detected - Face analysis paused");
+            
+            // Nếu muốn xóa gợi ý makeup khi phát hiện tay, bỏ comment dòng dưới
+            // setMakeupSuggestion(null);
+        } else {
+            // Khi không phát hiện tay, đặt lại thông báo mặc định
+            setStatusMessage("Face Detection Active");
+        }
+    }, [isHandActive]);
 
     useEffect(() => {
         const initializeFaceLandmarker = async () => {
@@ -314,8 +333,8 @@ export default function PersonalColor() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
                 
-                // Vẽ makeup nếu có landmarks
-                if (lastLandmarksRef.current) {
+                // Vẽ makeup chỉ khi có landmarks VÀ không phát hiện tay
+                if (lastLandmarksRef.current && !isHandActive) {
                     drawMakeup(
                         ctx,
                         lastLandmarksRef.current,
@@ -336,15 +355,16 @@ export default function PersonalColor() {
                 cancelAnimationFrame(videoRenderFrameId.current);
             }
         };
-    }, [stream]);
+    }, [stream, isHandActive]); // Thêm isHandActive vào dependencies
 
-    // Sửa useEffect phát hiện khuôn mặt riêng biệt
+    // Sửa useEffect phát hiện khuôn mặt để kiểm tra isHandActive
     useEffect(() => {
         if (
             !isFaceLandmarkerReady ||
             !stream ||
             !displayVideoRef.current ||
-            !isFaceDetectionActive
+            !isFaceDetectionActive ||
+            isHandActive // Thêm điều kiện isHandActive
         ) {
             return;
         }
@@ -400,7 +420,7 @@ export default function PersonalColor() {
                 cancelAnimationFrame(animationFrameId.current);
             }
         };
-    }, [isFaceLandmarkerReady, stream, isFaceDetectionActive]);
+    }, [isFaceLandmarkerReady, stream, isFaceDetectionActive, isHandActive]); // Thêm isHandActive vào dependencies
 
     // Cải tiến hàm drawMakeup để vẽ chính xác
     function drawMakeup(

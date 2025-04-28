@@ -1,93 +1,66 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable react/display-name */
 // src/components/page/CosmeticSurgery.tsx
+
 "use client";
 
+import React from "react";
 import { useState, useEffect, useRef } from "react";
-import {
-  DrawingUtils,
-  FaceLandmarker,
-  FilesetResolver,
-  NormalizedLandmark,
-} from "@mediapipe/tasks-vision";
+import { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import AnalysisLayout from "../components/AnalysisLayout";
 import { useWebcam } from "../context/WebcamContext";
 import { useLoading } from "../context/LoadingContext";
+import { VIEWS } from "../constants/views";
 
 export default function CosmeticSurgery() {
-  const { stream, videoRef, error: webcamError } = useWebcam();
+    const {
+        stream,
+        error: webcamError,
+        detectionResults,
+        setCurrentView,
+    } = useWebcam();
+    const { setIsLoading } = useLoading();
+    const [error, setError] = useState<string | null>(null);
+    const [isVideoReady, setIsVideoReady] = useState(false);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const animationFrameId = useRef<number | null>(null);
+    const lastDetectTime = useRef(0);
+    const [result, setResult] = useState<string | null>(null);
+    const [topPoint, setTopPoint] = useState<NormalizedLandmark | null>(null);
+  
+    useEffect(() => {
+        setCurrentView(VIEWS.COSMETIC_SURGERY)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-  const [error, setError] = useState<string | null>(null);
-  const [isFaceLandmarkerReady, setIsFaceLandmarkerReady] = useState(false);
-  const [topPoint, setTopPoint] = useState<NormalizedLandmark | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
-  const animationFrameId = useRef<number | null>(null);
-  const loading = useLoading();
-  const [result, setResult] = useState<string | null>(null);
-  // const
-  useEffect(() => {
-    const initializeFaceLandmarker = async () => {
-      try {
-        const filesetResolver = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
-        );
-        const faceLandmarker = await FaceLandmarker.createFromOptions(
-          filesetResolver,
-          {
-            baseOptions: {
-              modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-              delegate: "GPU",
-            },
-            outputFaceBlendshapes: true,
-            outputFacialTransformationMatrixes: true,
-            runningMode: "VIDEO",
-            numFaces: 1,
-          }
-        );
-
-        faceLandmarkerRef.current = faceLandmarker;
-        setIsFaceLandmarkerReady(true);
-        loading.setIsLoading(false);
-        console.log("[CosmeticSurgery] FaceLandmarker initialized");
-      } catch (err) {
-        console.error(
-          "[CosmeticSurgery] Error initializing FaceLandmarker:",
-          err
-        );
-        setError("Failed to initialize face detection.");
-      }
-    };
-
-    initializeFaceLandmarker();
-
-    return () => {
-      if (faceLandmarkerRef.current) {
-        faceLandmarkerRef.current.close();
-        faceLandmarkerRef.current = null;
-      }
-      setIsFaceLandmarkerReady(false);
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-      }
-    };
-  }, []);
+    // Kết nối video stream
+    useEffect(() => {
+        if (stream && videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+                videoRef.current!.play().catch((err) => {
+                    console.error("[PersonalColor] Error playing video:", err);
+                });
+                setIsVideoReady(true);
+                setIsLoading(false);
+            };
+        }
+    }, [stream, setIsLoading]);
 
   useEffect(() => {
-    if (
-      !isFaceLandmarkerReady ||
-      !stream ||
-      !canvasRef.current ||
-      !videoRef.current
-    ) {
+    if (!stream || !canvasRef.current || !videoRef.current || !isVideoReady) {
+      console.log(
+          "[PersonalColor] Waiting for FaceLandmarker or webcam...");
       return;
     }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    video.srcObject = stream;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      setError("Failed to initialize canvas.");
-      return;
+        setError("Failed to initialize canvas.");
+        return;
     }
 
     const buildResult = (
@@ -126,18 +99,6 @@ export default function CosmeticSurgery() {
       ).toFixed(3)}</p>`;
       _result += `<p> The suggestion ratio is 1</p>`;
       setResult(_result);
-    };
-
-    const waitForVideoReady = async () => {
-      let retries = 5;
-      while (retries > 0 && video.readyState < 4) {
-        console.log(
-          "[CosmeticSurgery] Video not ready, waiting... readyState:",
-          video.readyState
-        );
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        retries--;
-      }
     };
 
     const calculateDistance = (
@@ -376,24 +337,14 @@ export default function CosmeticSurgery() {
     };
 
     const detect = async () => {
-      if (!faceLandmarkerRef.current) {
-        animationFrameId.current = requestAnimationFrame(detect);
-        return;
-      }
-
-      await waitForVideoReady();
-
-      if (video.readyState < 4) {
-        setError("Failed to load webcam video for face detection.");
-        return;
-      }
-
       try {
-        const results = await faceLandmarkerRef.current.detectForVideo(
-          video,
-          performance.now()
-        );
-
+        const now = performance.now();
+        const minInterval = detectionResults.face?.faceLandmarks?.length > 0 ? 33 : 100;
+        if (now - lastDetectTime.current < minInterval) {
+          animationFrameId.current = requestAnimationFrame(detect);
+          return;
+        }
+        lastDetectTime.current = now;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const videoRatio = video.videoWidth / video.videoHeight;
         const canvasRatio = canvas.width / canvas.height;
@@ -409,16 +360,11 @@ export default function CosmeticSurgery() {
           drawWidth = canvas.height * videoRatio;
           offsetX = (canvas.width - drawWidth) / 2;
         }
-
         ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
-        // ctx.rect(0, 0, drawWidth, drawHeight);
-        // ctx.fillStyle = "black";
-        // ctx.fill();
-        if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-          const landmarks = results.faceLandmarks[0];
+        if (detectionResults?.face?.faceLandmarks && detectionResults?.face?.faceLandmarks.length > 0) {
+          const landmarks = detectionResults?.face?.faceLandmarks[0];
           // analyzeFace(landmarks);
           drawingFaceGrid(landmarks);
-          // buildResult();
         }
       } catch (err) {
         console.error("[CosmeticSurgery] Error during face detection:", err);
@@ -434,18 +380,16 @@ export default function CosmeticSurgery() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [isFaceLandmarkerReady, stream]);
+  }, [stream, isVideoReady, detectionResults]);
 
   return (
-    <div>
-      <AnalysisLayout
-        title="Cosmetic Surgery"
-        description="Analyze facial features for cosmetic surgery recommendations."
-        videoRef={videoRef}
-        canvasRef={canvasRef}
-        result={result}
-        error={error || webcamError}
-      />
-    </div>
+    <AnalysisLayout
+      title="Cosmetic Surgery"
+      description="Analyze facial features for cosmetic surgery recommendations."
+      videoRef={videoRef}
+      canvasRef={canvasRef}
+      result={result}
+      error={error || webcamError}
+    />
   );
 }

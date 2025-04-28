@@ -82,7 +82,7 @@ export default function Sidebar({ currentView, onMenuSelect }: SidebarProps) {
             <li key={feature.name}>
               <button
                 ref={(el) => (menuRefs.current[index] = el) as any}
-                className={`menu-item w-full focus:outline-none focus:ring-2 focus:ring-pink-600 text-left py-2 px-4 rounded-lg text-lg font-medium transition duration-300 ${currentView === feature.view
+                className={`menu-item w-full focus:outline-none focus:ring-2 min-h-[123px] focus:ring-pink-600 text-left py-2 px-4 rounded-lg text-lg font-medium transition duration-300 ${currentView === feature.view
                     ? "menu-item-active bg-pink-400 text-white font-semibold shadow-md"
                     : "text-gray-700 hover:bg-pink-300 hover:text-white"
                   }`} // Áp dụng style active và hover

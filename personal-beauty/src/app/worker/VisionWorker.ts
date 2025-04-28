@@ -11,7 +11,7 @@ const modelConfigs: { [key: string]: any } = {
     class: HandLandmarker,
     options: {
       baseOptions: {
-        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+        modelAssetPath: `/models/hand_landmarker.task`,
         delegate: "GPU",
       },
       runningMode: "VIDEO",
@@ -22,7 +22,7 @@ const modelConfigs: { [key: string]: any } = {
     class: FaceLandmarker,
     options: {
       baseOptions: {
-        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+        modelAssetPath: `/models/face_landmarker.task`,
         delegate: "GPU",
       },
       outputFaceBlendshapes: false,
@@ -34,8 +34,7 @@ const modelConfigs: { [key: string]: any } = {
     class: ImageSegmenter,
     options: {
       baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/image_segmenter/hair_segmenter/float32/1/hair_segmenter.tflite",
+        modelAssetPath: "/models/hair_segmenter.tflite",
         delegate: "GPU",
       },
       runningMode: "VIDEO",
@@ -46,7 +45,7 @@ const modelConfigs: { [key: string]: any } = {
     class: PoseLandmarker,
     options: {
       baseOptions: {
-        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker/float16/1/pose_landmarker.task`,
+        modelAssetPath: `/models/pose_landmarker.task`,
         delegate: "GPU",
       },
       runningMode: "VIDEO",
@@ -94,8 +93,8 @@ const handleDetect = async () => {
       results.hand = { landmarks: [], isIndexRaised: false };
     }
 
-     // ---- Phase 2: Only detect other models if indexFinger not raised ----
-     if (!indexRaised) {
+    // ---- Phase 2: Only detect other models if indexFinger not raised ----
+    if (!indexRaised) {
       const otherModels = modelTypes.filter((m: string) => m !== "hand");
       for (const modelType of otherModels) {
         if (models.has(modelType)) {
@@ -128,7 +127,7 @@ self.onmessage = async (e: MessageEvent) => {
     try {
       if (!filesetResolver) {
         filesetResolver = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
+          "/wasm"
         );
       }
 

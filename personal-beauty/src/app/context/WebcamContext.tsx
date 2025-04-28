@@ -520,76 +520,122 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [stream, isHandDetectionEnabled, isHandWorkerInitialized]);
 
-  // Luồng phát hiện khuôn mặt (tốc độ thấp hơn) - CHỈ CHẠY KHI KHÔNG PHÁT HIỆN TAY
   useEffect(() => {
     const currentModelRequirements = modelRequirements[currentView] || [];
     // Chỉ chạy face detection nếu cần VÀ không phát hiện tay (isHandActive === false)
     if (!stream || !videoRef.current || !faceWorkerRef.current || 
         !isFaceWorkerInitialized || !currentModelRequirements.includes("face") || 
-        isHandActive) { // Thêm điều kiện isHandActive
+        isHandActive) {
       return;
     }
-
+  
     console.log("[WebcamProvider] Starting face detection loop...");
     const video = videoRef.current;
     
-    const faceDetect = async () => {
-      const now = performance.now();
+    // Đổi từ interval sang setTimeout để có thể kiểm soát thời gian chính xác
+    let timeoutId: any = null;
+    let isRunningDetection = false; // Biến cờ để tránh chạy chồng chéo
+    const DETECTION_INTERVAL = 330; // ~3 FPS - giảm từ 250ms (4FPS) để giảm CPU
+    
+    // Hàm detect với cơ chế cờ để tránh chạy chồng
+    const runDetection = async () => {
+      // Nếu đang chạy, không bắt đầu lại
+      if (isRunningDetection) return;
       
-      // Kiểm soát FPS phát hiện khuôn mặt - thấp hơn tay để tiết kiệm CPU
-      if (now - lastFaceDetectTime.current < FACE_DETECTION_INTERVAL) {
-        faceAnimationFrameId.current = requestAnimationFrame(faceDetect);
-        return;
-      }
-
-      lastFaceDetectTime.current = now;
-
-      // Kiểm tra video đã sẵn sàng
-      if (video.readyState < 2) {
-        faceAnimationFrameId.current = requestAnimationFrame(faceDetect);
-        return;
-      }
-
+      isRunningDetection = true;
+      
       try {
-        // Tạo bitmap nhỏ hơn cho phát hiện khuôn mặt
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        
-        // Kích thước thấp hơn so với phát hiện tay
-        canvas.width = 256;
-        canvas.height = 192;
-        
-        if (ctx) {
-          // Vẽ video lên canvas đã thu nhỏ
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          
-          // Tạo bitmap từ canvas
-          const imageBitmap = await createImageBitmap(canvas);
-          
-          // Gửi đến FaceWorker để xử lý
-          faceWorkerRef.current!.postMessage({
-            type: "detect",
-            data: {
-              imageBitmap,
-              timestamp: now
-            },
-          }, [imageBitmap]);
+        // Kiểm tra video đã sẵn sàng chưa
+        if (video.readyState < 2) {
+          console.log("[WebcamProvider] Video not ready yet");
+          scheduleNextRun();
+          return;
         }
+        
+        // Kiểm tra kích thước video
+        if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+          console.warn("[WebcamProvider] Video dimensions invalid, skipping detection");
+          scheduleNextRun();
+          return;
+        }
+        
+        // Sử dụng requestAnimationFrame để tạo canvas trong thời gian nhàn rỗi
+        requestAnimationFrame(() => {
+          try {
+            // Tạo canvas nhỏ hơn để giảm chi phí xử lý
+            const canvas = document.createElement('canvas');
+            const minWidth = Math.max(160, video.videoWidth / 4); 
+            const minHeight = Math.max(120, video.videoHeight / 4);
+            
+            canvas.width = minWidth;
+            canvas.height = minHeight;
+            
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx) {
+              console.error("[WebcamProvider] Could not get canvas context");
+              scheduleNextRun();
+              return;
+            }
+            
+            // Vẽ video lên canvas kích thước nhỏ
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Tạo bitmap bất đồng bộ
+            createImageBitmap(canvas, 0, 0, canvas.width, canvas.height)
+              .then(imageBitmap => {
+                // Kiểm tra lại kích thước bitmap
+                if (imageBitmap.width <= 0 || imageBitmap.height <= 0) {
+                  console.warn("[WebcamProvider] Created bitmap has invalid dimensions");
+                  imageBitmap.close();
+                  scheduleNextRun();
+                  return;
+                }
+                
+                // Gửi đến FaceWorker
+                if (faceWorkerRef.current) {
+                  faceWorkerRef.current.postMessage({
+                    type: "detect",
+                    data: {
+                      imageBitmap,
+                      timestamp: performance.now()
+                    },
+                  }, [imageBitmap]); // Chuyển quyền sở hữu bitmap
+                }
+                
+                // Lên lịch phát hiện tiếp theo
+                scheduleNextRun();
+              })
+              .catch(err => {
+                console.error("[WebcamProvider] Error creating bitmap:", err);
+                scheduleNextRun();
+              });
+          } catch (err) {
+            console.error("[WebcamProvider] Error preparing face detection:", err);
+            scheduleNextRun();
+          }
+        });
       } catch (err) {
-        console.error("[WebcamProvider] Error creating bitmap for face detection:", err);
+        console.error("[WebcamProvider] Error in detection cycle:", err);
+        scheduleNextRun();
       }
-
-      faceAnimationFrameId.current = requestAnimationFrame(faceDetect);
     };
-
-    faceDetect();
-
+    
+    // Lên lịch chạy tiếp theo với thời gian cố định
+    const scheduleNextRun = () => {
+      isRunningDetection = false;
+      timeoutId = setTimeout(runDetection, DETECTION_INTERVAL);
+    };
+    
+    // Bắt đầu vòng lặp phát hiện
+    runDetection();
+    
+    // Cleanup
     return () => {
-      if (faceAnimationFrameId.current) {
-        cancelAnimationFrame(faceAnimationFrameId.current);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
     };
-  }, [stream, currentView, modelRequirements, isFaceWorkerInitialized, isHandActive]); // Thêm isHandActive vào dependencies
+  }, [stream, currentView, modelRequirements, isFaceWorkerInitialized, isHandActive]);
 
   // Memoize context value
   const contextValue = useMemo(() => ({

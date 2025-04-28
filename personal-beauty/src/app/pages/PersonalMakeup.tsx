@@ -357,70 +357,122 @@ export default function PersonalColor() {
         };
     }, [stream, isHandActive]); // Thêm isHandActive vào dependencies
 
-    // Sửa useEffect phát hiện khuôn mặt để kiểm tra isHandActive
     useEffect(() => {
         if (
             !isFaceLandmarkerReady ||
             !stream ||
             !displayVideoRef.current ||
             !isFaceDetectionActive ||
-            isHandActive // Thêm điều kiện isHandActive
+            isHandActive // Dừng khi phát hiện tay
         ) {
             return;
         }
         
         const video = displayVideoRef.current;
-
-        const detect = async () => {
-            if (!faceLandmarkerRef.current) {
-                animationFrameId.current = requestAnimationFrame(detect);
-                return;
-            }
-
-            try {
-                const now = performance.now();
-                if (now - lastDetectTime.current < 120) { // Giữ nguyên 10 FPS
-                    animationFrameId.current = requestAnimationFrame(detect);
+        
+        // Sử dụng interval thay vì requestAnimationFrame để kiểm soát tốt hơn
+        let detectionInterval: any = null;
+        
+        const startDetection = () => {
+            // Đặt khoảng thời gian dài hơn: 250ms (4 FPS)
+            detectionInterval = setInterval(() => {
+                if (!faceLandmarkerRef.current || video.readyState < 2) {
                     return;
                 }
-
-                lastDetectTime.current = now;
                 
-                const results = faceLandmarkerRef.current.detectForVideo(video, now);
-                if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                    const landmarks = results.faceLandmarks[0];
+                try {
+                    const now = performance.now();
                     
-                    // Lưu landmarks để vẽ makeup ở vòng lặp render video
-                    lastLandmarksRef.current = landmarks;
-                    
-                    // Chỉ phân tích đặc điểm mỗi 2 giây
-                    if (now - lastAnalysisTime.current > 2000 || !makeupSuggestion) {
-                        lastAnalysisTime.current = now;
-                        const features = analyzeFacialFeatures(landmarks);
-                        const suggestion = generateMakeupSuggestion(features);
-                        setMakeupSuggestion(`${suggestion}`);
+                    // Kiểm tra kích thước video
+                    if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+                        console.warn("[PersonalColor] Video has invalid dimensions, skipping detection");
+                        return;
                     }
-
-                    setStatusMessage("ok");
+                    
+                    // Tạo canvas với kích thước đủ lớn
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(320, video.videoWidth / 3);
+                    canvas.height = Math.max(240, video.videoHeight / 3);
+                    
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        console.error("[PersonalColor] Could not get canvas context");
+                        return;
+                    }
+                    
+                    // Vẽ video lên canvas
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    
+                    // Kiểm tra nội dung canvas
+                    const centerX = Math.floor(canvas.width / 2);
+                    const centerY = Math.floor(canvas.height / 2);
+                    const testData = ctx.getImageData(centerX - 5, centerY - 5, 10, 10);
+                    
+                    let hasContent = false;
+                    for (let i = 0; i < testData.data.length; i += 4) {
+                        if (testData.data[i] > 0 || testData.data[i+1] > 0 || testData.data[i+2] > 0) {
+                            hasContent = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!hasContent) {
+                        console.warn("[PersonalColor] Canvas appears empty, skipping detection");
+                        return;
+                    }
+                    
+                    // Nếu mọi thứ hợp lệ, thực hiện phát hiện khuôn mặt
+                    const video2 = document.createElement('video');
+                    video2.width = canvas.width;
+                    video2.height = canvas.height;
+                    
+                    // Sử dụng trực tiếp canvas thay vì tạo video element
+                    const results = faceLandmarkerRef.current.detectForVideo(video, now);
+                    
+                    if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+                        const landmarks = results.faceLandmarks[0];
+                        
+                        // Lưu landmarks để vẽ makeup
+                        lastLandmarksRef.current = landmarks;
+                        
+                        // Chỉ phân tích đặc điểm mỗi 3 giây
+                        if (now - lastAnalysisTime.current > 3000 || !makeupSuggestion) {
+                            lastAnalysisTime.current = now;
+                            // Thực hiện phân tích trong một setTimeout để không chặn luồng chính
+                            setTimeout(() => {
+                                if (landmarks) {
+                                    const features = analyzeFacialFeatures(landmarks);
+                                    const suggestion = generateMakeupSuggestion(features);
+                                    setMakeupSuggestion(`${suggestion}`);
+                                }
+                            }, 0);
+                        }
+                        
+                        setStatusMessage("Face detected");
+                    }
+                } catch (err) {
+                    console.error(
+                        "[PersonalColor] Error during face detection:",
+                        err
+                    );
                 }
-            } catch (err) {
-                console.error(
-                    "[PersonalMakeup] Error during face mesh detection:",
-                    err
-                );
-            }
-
-            animationFrameId.current = requestAnimationFrame(detect);
+            }, 250);
         };
-
-        detect();
-
+        
+        // Bắt đầu phát hiện
+        startDetection();
+        
         return () => {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+            }
+            
             if (animationFrameId.current) {
                 cancelAnimationFrame(animationFrameId.current);
+                animationFrameId.current = null;
             }
         };
-    }, [isFaceLandmarkerReady, stream, isFaceDetectionActive, isHandActive]); // Thêm isHandActive vào dependencies
+    }, [isFaceLandmarkerReady, stream, isFaceDetectionActive, isHandActive]);
 
     // Cải tiến hàm drawMakeup để vẽ chính xác
     function drawMakeup(

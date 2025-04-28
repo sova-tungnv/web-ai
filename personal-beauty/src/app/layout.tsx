@@ -16,6 +16,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preload" href="/wasm/vision_wasm_internal.wasm" as="fetch" crossOrigin="anonymous" />
+      </head>
       <body>
         <LoadingProvider>
           <WebcamProvider>

@@ -149,6 +149,22 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         },
       });
       setStream(mediaStream);
+
+      mediaStream.getVideoTracks().forEach((track) => {
+        track.addEventListener("ended", async () => {
+          console.warn("[WebcamProvider] Video track ended. Restarting...");
+          await restartStream();
+        });
+        track.addEventListener("mute", async () => {
+          console.warn("[WebcamProvider] Video track muted. Restarting...");
+          await restartStream();
+        });
+        track.addEventListener("inactive", async () => {
+          console.warn("[WebcamProvider] Video track inactive. Restarting...");
+          await restartStream();
+        });
+      });
+      
     } catch (err) {
       console.error("[WebcamProvider] Error accessing webcam:", err);
       setError("Failed to access webcam. Please check your camera permissions.");
@@ -185,7 +201,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     workerRef.current = new Worker(new URL("../worker/VisionWorker.ts", import.meta.url));
     workerRef.current.onmessage = (e: MessageEvent) => {
       const { type, results } = e.data;
-      console.log("[WebcamContext] Worker message:", { type, results });
+      //console.log("[WebcamContext] Worker message:", { type, results });
       if (type === "detectionResult") {
         if (results?.hand?.landmarks?.length > 0) {
           const landmarks = results.hand.landmarks[0];
@@ -263,13 +279,19 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       lastDetectTime.current = now;
 
-      if (video.readyState < 4) {
+      if (video.readyState < 4 || video.paused) {
+        console.warn("[WebcamProvider] Video not ready or paused, skipping frame.");
         animationFrameId.current = requestAnimationFrame(detect);
         return;
       }
 
       try {
         const imageBitmap = await createImageBitmap(video);
+        if (imageBitmap.width === 0 || imageBitmap.height === 0) {
+          console.warn("[WebcamProvider] Empty ImageBitmap, skipping frame.");
+          animationFrameId.current = requestAnimationFrame(detect);
+          return;
+        }
         const modelTypes = modelRequirements[currentView] || ["hand"];
 
         workerRef.current!.postMessage({

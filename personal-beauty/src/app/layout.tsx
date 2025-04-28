@@ -18,6 +18,11 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <link rel="preload" href="/wasm/vision_wasm_internal.wasm" as="fetch" crossOrigin="anonymous" />
+        <link rel="preload" href="/wasm/vision_wasm_internal.js" as="script" />
+        <link rel="preload" href="/models/hand_landmarker.task" as="fetch" crossOrigin="anonymous" />
+        <link rel="preload" href="/models/face_landmarker.task" as="fetch" crossOrigin="anonymous" />
+        <link rel="preload" href="/models/pose_landmarker.task" as="fetch" crossOrigin="anonymous" />
+        <link rel="preload" href="/models/hair_segmenter.tflite" as="fetch" crossOrigin="anonymous" />
       </head>
       <body>
         <LoadingProvider>

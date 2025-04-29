@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/worker/HandWorker.ts
-// Worker tối ưu cho phát hiện tay
+// Worker tối ưu cho phát hiện tay và ngón tay
 
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
@@ -10,50 +10,26 @@ let filesetResolver: any = null;
 let isProcessing = false;
 let isInitializing = false;
 const frameQueue: { imageBitmap: ImageBitmap, timestamp: number }[] = [];
-const MAX_QUEUE_SIZE = 2; // Chỉ giữ 2 frame mới nhất
+const MAX_QUEUE_SIZE = 1; // Chỉ giữ 1 frame mới nhất
 
 // Hiệu suất timing
 let lastProcessTime = 0;
 const PROCESS_THROTTLE = 16; // 60fps
 
-// Cấu hình mô hình cho các trường hợp khác nhau
-const MODEL_CONFIGS = {
-  // Chế độ hiệu suất cao - ít chính xác nhưng nhanh hơn
-  performance: {
-    minHandDetectionConfidence: 0.2,
-    minHandPresenceConfidence: 0.2,
-    minTrackingConfidence: 0.2,
-  },
-  // Chế độ cân bằng - mặc định
-  balanced: {
-    minHandDetectionConfidence: 0.3,
-    minHandPresenceConfidence: 0.3,
-    minTrackingConfidence: 0.3,
-  },
-  // Chế độ chính xác - chậm hơn nhưng chính xác hơn
-  accuracy: {
-    minHandDetectionConfidence: 0.5, 
-    minHandPresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-  },
+// Cấu hình mô hình với độ nhạy cao để phát hiện tay nhanh hơn
+const MODEL_CONFIG = {
+  minHandDetectionConfidence: 0.3,   // Giảm xuống để phát hiện nhanh hơn
+  minHandPresenceConfidence: 0.3,    // Giảm xuống để phát hiện nhanh hơn
+  minTrackingConfidence: 0.3         // Giảm xuống để theo dõi dễ dàng hơn
 };
 
-// Cấu hình hiện tại - mặc định là hiệu suất cao cho ứng dụng này
-let currentConfig = { ...MODEL_CONFIGS.performance };
+// Cache kết quả trước đó để giảm nhấp nháy
+let lastValidLandmarks: any = null;
+let detectionFailures = 0;
+const MAX_FAILURES = 2; // Giảm xuống để phản ứng nhanh hơn với việc mất tay
 
-// Hàm cập nhật cấu hình mô hình
-const updateModelConfig = async (configName: 'performance' | 'balanced' | 'accuracy') => {
-  if (!handLandmarker) return;
-  
-  // Lưu cấu hình mới
-  currentConfig = { ...MODEL_CONFIGS[configName] };
-  
-  // Đóng mô hình hiện tại
-  handLandmarker.close();
-  
-  // Khởi tạo lại với cấu hình mới
-  await initializeModel();
-};
+// Hằng số cho phát hiện cử chỉ
+const FINGER_UP_THRESHOLD = 0.035; // Giảm ngưỡng để dễ phát hiện ngón tay hơn
 
 // Khởi tạo mô hình với cấu hình hiện tại
 const initializeModel = async () => {
@@ -71,13 +47,60 @@ const initializeModel = async () => {
     },
     runningMode: "VIDEO",
     numHands: 1, // Chỉ theo dõi 1 bàn tay để tối ưu hiệu suất
-    minHandDetectionConfidence: currentConfig.minHandDetectionConfidence,
-    minHandPresenceConfidence: currentConfig.minHandPresenceConfidence,
-    minTrackingConfidence: currentConfig.minTrackingConfidence
+    minHandDetectionConfidence: MODEL_CONFIG.minHandDetectionConfidence,
+    minHandPresenceConfidence: MODEL_CONFIG.minHandPresenceConfidence,
+    minTrackingConfidence: MODEL_CONFIG.minTrackingConfidence
   });
   
   return handLandmarker;
 };
+
+// Hàm phát hiện cử chỉ tay
+function detectGesture(landmarks: any[]) {
+  // Kiểm tra ngón trỏ có đang dơ lên không
+  const indexFingerUp = isFingerUp(landmarks, 8, 5);
+  
+  // Kiểm tra các ngón khác có đang gập không
+  const middleFingerUp = isFingerUp(landmarks, 12, 9);
+  const ringFingerUp = isFingerUp(landmarks, 16, 13);
+  const pinkyUp = isFingerUp(landmarks, 20, 17);
+  
+  // Kiểm tra ngón cái
+  const thumbOut = isThumbOut(landmarks);
+  
+  // Xác định cử chỉ
+  const isOneFingerUp = indexFingerUp && !middleFingerUp && !ringFingerUp && !pinkyUp;
+  const isTwoFingersUp = indexFingerUp && middleFingerUp && !ringFingerUp && !pinkyUp;
+  const isOpenHand = indexFingerUp && middleFingerUp && ringFingerUp && pinkyUp;
+  const isFist = !indexFingerUp && !middleFingerUp && !ringFingerUp && !pinkyUp;
+  
+  // Chỉ phát hiện khi có ngón tay dơ lên
+  const isHandDetected = isOneFingerUp || isTwoFingersUp || isOpenHand;
+  
+  return {
+    isHandDetected,
+    isIndexFingerUp: indexFingerUp,
+    isTwoFingersUp,
+    isOpenHand,
+    isFist
+  };
+}
+
+// Kiểm tra một ngón tay có được dơ lên không
+function isFingerUp(landmarks: any[], tipIndex: number, baseIndex: number) {
+  // Nếu đầu ngón tay (y-coordinate) cao hơn khớp cơ sở (thấp hơn về pixel)
+  return landmarks[tipIndex].y < landmarks[baseIndex].y - FINGER_UP_THRESHOLD;
+}
+
+// Kiểm tra ngón cái có được giơ ra không
+function isThumbOut(landmarks: any[]) {
+  // Kiểm tra ngón cái (ngón 1) nằm ngoài lòng bàn tay
+  const thumbTip = landmarks[4];
+  const indexBase = landmarks[5];
+  
+  // Sử dụng tọa độ x thay vì y vì ngón cái di chuyển sang bên
+  return thumbTip.x < indexBase.x - FINGER_UP_THRESHOLD;
+}
 
 // Tối ưu: Xử lý frame với độ ưu tiên cao nhất
 const processFrame = async () => {
@@ -107,20 +130,59 @@ const processFrame = async () => {
   }
   
   try {
-    // Thực hiện phát hiện với config tối ưu
+    // Thực hiện phát hiện
     const results = handLandmarker.detectForVideo(imageBitmap, timestamp);
     
-    // Tối ưu: Thêm thông tin thời gian xử lý
-    const processingTime = performance.now() - now;
-    
-    // Gửi kết quả ngay lập tức về main thread
-    self.postMessage({ 
-      type: "detectionResult", 
-      results: { hand: results },
-      timestamp,
-      processingTime,
-      priority: "high" // Đánh dấu ưu tiên cao
-    });
+    if (results.landmarks && results.landmarks.length > 0) {
+      // Phát hiện cử chỉ
+      const gesture = detectGesture(results.landmarks[0]);
+      
+      // Chỉ báo cáo phát hiện tay nếu có ngón tay dơ lên
+      if (gesture.isHandDetected) {
+        // Lưu landmarks hợp lệ
+        lastValidLandmarks = results.landmarks;
+        detectionFailures = 0;
+        
+        // Thêm thông tin cử chỉ vào kết quả
+        const enhancedResults = {
+          ...results,
+          gesture
+        };
+        
+        self.postMessage({ 
+          type: "detectionResult", 
+          results: { hand: enhancedResults },
+          timestamp
+        });
+      } else {
+        // Có tay nhưng không có ngón tay dơ lên - coi như không phát hiện tay
+        detectionFailures++;
+        
+        if (detectionFailures > MAX_FAILURES) {
+          // Gửi kết quả không phát hiện sau nhiều lần thất bại
+          self.postMessage({ 
+            type: "detectionResult", 
+            results: { hand: { landmarks: [] } },
+            timestamp
+          });
+        }
+      }
+    } else {
+      // Không phát hiện tay
+      detectionFailures++;
+      
+      if (detectionFailures > MAX_FAILURES) {
+        // Gửi kết quả không phát hiện sau nhiều lần thất bại
+        self.postMessage({ 
+          type: "detectionResult", 
+          results: { hand: { landmarks: [] } },
+          timestamp
+        });
+        
+        // Reset cache
+        lastValidLandmarks = null;
+      }
+    }
   } catch (err) {
     self.postMessage({ 
       type: "detectionResult", 
@@ -136,7 +198,7 @@ const processFrame = async () => {
     }
     isProcessing = false;
     
-    // Tiếp tục xử lý frame tiếp theo nếu có, không có setTimeout
+    // Tiếp tục xử lý frame tiếp theo nếu có
     if (frameQueue.length > 0) {
       requestAnimationFrame(() => processFrame());
     }
@@ -153,12 +215,6 @@ self.onmessage = async (e: MessageEvent) => {
       isInitializing = true;
       
       console.log("[HandWorker] Initializing...");
-      
-      // Nếu có cấu hình, cập nhật
-      if (config && config.mode) {
-        // @ts-ignore
-        currentConfig = { ...MODEL_CONFIGS[config.mode] };
-      }
       
       await initializeModel();
       isInitializing = false;
@@ -177,26 +233,6 @@ self.onmessage = async (e: MessageEvent) => {
     }
   }
 
-  else if (type === "updateConfig") {
-    if (config && config.mode) {
-      try {
-        // @ts-ignore
-        await updateModelConfig(config.mode);
-        self.postMessage({ 
-          type: "configUpdated", 
-          success: true, 
-          mode: config.mode 
-        });
-      } catch (err) {
-        self.postMessage({ 
-          type: "configUpdated", 
-          success: false, 
-          error: (err as Error).message 
-        });
-      }
-    }
-  }
-
   else if (type === "detect") {
     // Nếu mô hình chưa được khởi tạo, bỏ qua frame
     if (!handLandmarker) {
@@ -212,9 +248,20 @@ self.onmessage = async (e: MessageEvent) => {
 
     const { imageBitmap, timestamp } = data;
     
-    // Quản lý kích thước hàng đợi
+    // Kiểm tra bitmap hợp lệ
+    if (!imageBitmap || imageBitmap.width <= 0 || imageBitmap.height <= 0) {
+      if (imageBitmap) {
+        try {
+          imageBitmap.close();
+        } catch (e) {
+          console.error("Error closing invalid bitmap:", e);
+        }
+      }
+      return;
+    }
+    
+    // Quản lý kích thước hàng đợi - giữ tối đa MAX_QUEUE_SIZE frames
     if (frameQueue.length >= MAX_QUEUE_SIZE) {
-      // Xóa frame cũ nhất
       const oldestFrame = frameQueue.shift()!;
       try {
         oldestFrame.imageBitmap.close();

@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/app/context/WebcamContext.tsx
+// Thêm state mới để theo dõi việc phát hiện tay
 
 "use client";
 
@@ -25,8 +25,10 @@ interface WebcamContextType {
   isHandDetectionEnabled: boolean;
   detectionResults: { [key: string]: any };
   currentView: string;
-  setCurrentView: (view: string) => void; // Đã sửa kiểu dữ liệu
+  setCurrentView: (view: string) => void;
   cursorRef: RefObject<HTMLDivElement>;
+  // Thêm một property mới để kiểm soát face detection và filter
+  isHandActive: boolean;
 }
 
 // Các hằng số cho xử lý mượt mà
@@ -101,6 +103,9 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Worker states
   const [isHandWorkerInitialized, setIsHandWorkerInitialized] = useState(false);
   const [isFaceWorkerInitialized, setIsFaceWorkerInitialized] = useState(false);
+  
+  // Thêm state mới để theo dõi tay có được phát hiện hay không
+  const [isHandActive, setIsHandActive] = useState(false);
   
   // Sử dụng useMemo để tránh tính toán lại
   const modelRequirements = useMemo(() => ({
@@ -213,12 +218,15 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
       
       // Thêm hiệu ứng khi bàn tay mở
-      if (isOpenHand) {
-        cursorRef.current.classList.add('open-hand');
-      } else {
-        cursorRef.current.classList.remove('open-hand');
-      }
+      // if (isOpenHand) {
+      //   cursorRef.current.classList.add('open-hand');
+      // } else {
+      //   cursorRef.current.classList.remove('open-hand');
+      // }
     }
+
+    // Cập nhật state isHandActive khi phát hiện tay
+    setIsHandActive(true);
 
     return handDataRef.current;
   }, [detectGesture, baseAlpha]);
@@ -349,6 +357,11 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const landmarks = results.hand.landmarks[0];
             const detected = detectFull(landmarks);
             setIsIndexFingerRaised(detected.isOpenHand);
+            
+            // Hiển thị con trỏ khi phát hiện tay
+            if (cursorRef.current) {
+              cursorRef.current.classList.remove('hidden');
+            }
           } else {
             // Không phát hiện tay
             handDataRef.current = {
@@ -361,6 +374,9 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (cursorRef.current) {
               cursorRef.current.classList.add('hidden');
             }
+            
+            // Đặt isHandActive thành false khi không phát hiện tay
+            setIsHandActive(false);
           }
           
           // Chỉ cập nhật detection results khi thực sự có thay đổi
@@ -504,75 +520,122 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [stream, isHandDetectionEnabled, isHandWorkerInitialized]);
 
-  // Luồng phát hiện khuôn mặt (tốc độ thấp hơn)
   useEffect(() => {
     const currentModelRequirements = modelRequirements[String(currentView) as ViewType] || [];
     // Chỉ chạy face detection nếu cần
     if (!stream || !videoRef.current || !faceWorkerRef.current || 
-        !isFaceWorkerInitialized || !currentModelRequirements.includes("face")) {
+        !isFaceWorkerInitialized || !currentModelRequirements.includes("face") || 
+        isHandActive) {
       return;
     }
-
+  
     console.log("[WebcamProvider] Starting face detection loop...");
     const video = videoRef.current;
     
-    const faceDetect = async () => {
-      const now = performance.now();
+    // Đổi từ interval sang setTimeout để có thể kiểm soát thời gian chính xác
+    let timeoutId: any = null;
+    let isRunningDetection = false; // Biến cờ để tránh chạy chồng chéo
+    const DETECTION_INTERVAL = 330; // ~3 FPS - giảm từ 250ms (4FPS) để giảm CPU
+    
+    // Hàm detect với cơ chế cờ để tránh chạy chồng
+    const runDetection = async () => {
+      // Nếu đang chạy, không bắt đầu lại
+      if (isRunningDetection) return;
       
-      // Kiểm soát FPS phát hiện khuôn mặt - thấp hơn tay để tiết kiệm CPU
-      if (now - lastFaceDetectTime.current < FACE_DETECTION_INTERVAL) {
-        faceAnimationFrameId.current = requestAnimationFrame(faceDetect);
-        return;
-      }
-
-      lastFaceDetectTime.current = now;
-
-      // Kiểm tra video đã sẵn sàng
-      if (video.readyState < 2) {
-        faceAnimationFrameId.current = requestAnimationFrame(faceDetect);
-        return;
-      }
-
+      isRunningDetection = true;
+      
       try {
-        // Tạo bitmap nhỏ hơn cho phát hiện khuôn mặt
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        
-        // Kích thước thấp hơn so với phát hiện tay
-        canvas.width = 256;
-        canvas.height = 192;
-        
-        if (ctx) {
-          // Vẽ video lên canvas đã thu nhỏ
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          
-          // Tạo bitmap từ canvas
-          const imageBitmap = await createImageBitmap(canvas);
-          
-          // Gửi đến FaceWorker để xử lý
-          faceWorkerRef.current!.postMessage({
-            type: "detect",
-            data: {
-              imageBitmap,
-              timestamp: now
-            },
-          }, [imageBitmap]);
+        // Kiểm tra video đã sẵn sàng chưa
+        if (video.readyState < 2) {
+          console.log("[WebcamProvider] Video not ready yet");
+          scheduleNextRun();
+          return;
         }
+        
+        // Kiểm tra kích thước video
+        if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+          console.warn("[WebcamProvider] Video dimensions invalid, skipping detection");
+          scheduleNextRun();
+          return;
+        }
+        
+        // Sử dụng requestAnimationFrame để tạo canvas trong thời gian nhàn rỗi
+        requestAnimationFrame(() => {
+          try {
+            // Tạo canvas nhỏ hơn để giảm chi phí xử lý
+            const canvas = document.createElement('canvas');
+            const minWidth = Math.max(160, video.videoWidth / 4); 
+            const minHeight = Math.max(120, video.videoHeight / 4);
+            
+            canvas.width = minWidth;
+            canvas.height = minHeight;
+            
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx) {
+              console.error("[WebcamProvider] Could not get canvas context");
+              scheduleNextRun();
+              return;
+            }
+            
+            // Vẽ video lên canvas kích thước nhỏ
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Tạo bitmap bất đồng bộ
+            createImageBitmap(canvas, 0, 0, canvas.width, canvas.height)
+              .then(imageBitmap => {
+                // Kiểm tra lại kích thước bitmap
+                if (imageBitmap.width <= 0 || imageBitmap.height <= 0) {
+                  console.warn("[WebcamProvider] Created bitmap has invalid dimensions");
+                  imageBitmap.close();
+                  scheduleNextRun();
+                  return;
+                }
+                
+                // Gửi đến FaceWorker
+                if (faceWorkerRef.current) {
+                  faceWorkerRef.current.postMessage({
+                    type: "detect",
+                    data: {
+                      imageBitmap,
+                      timestamp: performance.now()
+                    },
+                  }, [imageBitmap]); // Chuyển quyền sở hữu bitmap
+                }
+                
+                // Lên lịch phát hiện tiếp theo
+                scheduleNextRun();
+              })
+              .catch(err => {
+                console.error("[WebcamProvider] Error creating bitmap:", err);
+                scheduleNextRun();
+              });
+          } catch (err) {
+            console.error("[WebcamProvider] Error preparing face detection:", err);
+            scheduleNextRun();
+          }
+        });
       } catch (err) {
-        console.error("[WebcamProvider] Error creating bitmap for face detection:", err);
+        console.error("[WebcamProvider] Error in detection cycle:", err);
+        scheduleNextRun();
       }
-
-      faceAnimationFrameId.current = requestAnimationFrame(faceDetect);
     };
-
-    faceDetect();
-
+    
+    // Lên lịch chạy tiếp theo với thời gian cố định
+    const scheduleNextRun = () => {
+      isRunningDetection = false;
+      timeoutId = setTimeout(runDetection, DETECTION_INTERVAL);
+    };
+    
+    // Bắt đầu vòng lặp phát hiện
+    runDetection();
+    
+    // Cleanup
     return () => {
-      if (faceAnimationFrameId.current) {
-        cancelAnimationFrame(faceAnimationFrameId.current);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
     };
-  }, [stream, currentView, modelRequirements, isFaceWorkerInitialized]);
+  }, [stream, currentView, modelRequirements, isFaceWorkerInitialized, isHandActive]);
 
   // Memoize context value
   const contextValue = useMemo(() => ({
@@ -588,6 +651,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     detectionResults,
     setCurrentView,
     cursorRef,
+    isHandActive, // Thêm vào context value
   }), [
     stream, 
     error, 
@@ -596,7 +660,8 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     isIndexFingerRaised, 
     isHandDetectionEnabled,
     currentView,
-    detectionResults
+    detectionResults,
+    isHandActive // Thêm vào dependencies
   ]);
 
   return (
@@ -608,6 +673,10 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         playsInline 
         muted
       />
+      {/* <div 
+        ref={cursorRef}
+        className="cursor hidden"
+      /> */}
       {/* Thêm CSS cho cursor */}
       <style jsx global>{`
         .hidden {

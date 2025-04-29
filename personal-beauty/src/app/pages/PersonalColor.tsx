@@ -58,7 +58,7 @@ const SelectionButton = React.memo(
         return (
             <button
                 ref={buttonRef}
-                className={`area-button text-2xl font-semibold px-8 py-4 rounded-xl transition-all duration-300 transform shadow-lg ${selectedArea === area
+                className={`area-button text-2xl min-h-[123px] font-semibold px-8 py-4 rounded-xl transition-all duration-300 transform shadow-lg ${selectedArea === area
                     ? "bg-pink-600 text-white scale-105 border-4 border-pink-300"
                     : "bg-gray-200 text-gray-800 hover:bg-gray-300 hover:scale-105"
                     }`}
@@ -70,7 +70,6 @@ const SelectionButton = React.memo(
         );
     }
 );
-
 
 export default function PersonalColor() {
     const {
@@ -112,17 +111,21 @@ export default function PersonalColor() {
     };
 
     useEffect(() => {
-        setCurrentView(VIEWS.PERSONAL_COLOR)
+        setCurrentView(VIEWS.PERSONAL_COLOR);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const selectionButtons = useMemo(
         () => (
-            <div className="flex gap-6">
-                {areas.map((area) => (
-                    <SelectionButton key={area} area={area} selectedArea={selectedArea} setSelectedArea={setSelectedArea} />
-                ))}
-            </div>
+            <div className="md:w-2/12 p-1 rounded-xl flex flex-col max-h-[calc(100vh-64px)] overflow-hidden">
+                <div className="flex flex-col flex-wrap gap-3 w-full h-full">
+                    <div className="flex flex-col gap-6">
+                        {areas.map((area) => (
+                            <SelectionButton key={area} area={area} selectedArea={selectedArea} setSelectedArea={setSelectedArea} />
+                        ))}
+                    </div>
+                </div>
+          </div>
         ),
         [selectedArea, setSelectedArea]
     );
@@ -184,7 +187,7 @@ export default function PersonalColor() {
         }
     }, [stream, setIsLoading]);
 
-    // Hàm phân tích tông màu từ ImageData (giữ nguyên đoạn code gốc)
+    // Hàm phân tích tông màu từ ImageData
     const analyzeColorTone = (imageData: ImageData): string => {
         const data = imageData.data;
         let r = 0,
@@ -225,8 +228,7 @@ export default function PersonalColor() {
     // Xử lý vẽ video, phân tích tông màu, và vẽ landmarks
     useEffect(() => {
         if (!stream || !canvasRef.current || !displayVideoRef.current || !isVideoReady) {
-            console.log(
-                "[PersonalColor] Waiting for FaceLandmarker or webcam...");
+            console.log("[PersonalColor] Waiting for FaceLandmarker or webcam...");
             return;
         }
 
@@ -263,8 +265,8 @@ export default function PersonalColor() {
                 const now = performance.now();
                 const minInterval = detectionResults.face?.faceLandmarks?.length > 0 ? 33 : 100;
                 if (now - lastDetectTime.current < minInterval) {
-                  animationFrameId.current = requestAnimationFrame(draw);
-                  return;
+                    animationFrameId.current = requestAnimationFrame(draw);
+                    return;
                 }
                 lastDetectTime.current = now;
 
@@ -287,13 +289,13 @@ export default function PersonalColor() {
 
                 // Vẽ video
                 ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
-                
+
                 if (detectionResults && detectionResults.face?.faceLandmarks && detectionResults.face?.faceLandmarks.length > 0) {
                     const landmarks = detectionResults.face?.faceLandmarks[0];
-                    
+
                     // Phân tích tông màu từ vùng mặt
                     const faceLandmarks = AREA_LANDMARKS["face"];
-                    
+
                     if (landmarks && faceLandmarks) {
                         // Tính vùng bao quanh các landmarks của mặt
                         const xs = faceLandmarks.map((index) => landmarks[index]?.x * drawWidth + offsetX).filter((x) => x !== undefined);
@@ -310,7 +312,7 @@ export default function PersonalColor() {
                             const imageData = ctx.getImageData(minX, minY, width, height);
                             const tone = analyzeColorTone(imageData);
                             console.log("[PersonalColor] Detected color tone:", tone);
-                            setColorTone(tone);
+                            setColorTone(tone); // Chỉ cập nhật nếu có dữ liệu mới
                         }
                     }
 
@@ -318,9 +320,8 @@ export default function PersonalColor() {
                     if (selectedArea && AREA_LANDMARKS[selectedArea]) {
                         drawLandmarks(landmarks, AREA_LANDMARKS[selectedArea]);
                     }
-                } else {
-                    setColorTone(null);
                 }
+                // Không reset colorTone khi không phát hiện khuôn mặt
             } catch (err) {
                 console.error("[PersonalColor] Error during face detection:", err);
             }

@@ -13,11 +13,12 @@ interface AnalysisLayoutProps {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   result: string | null;
   error: string | null;
+  detectionResults?: any; // Thêm prop để nhận detectionResults
   selectionButtons?: JSX.Element;
   colorPalette?: JSX.Element;
   actionButtons?: JSX.Element;
-  statusMessage?: string;
-  progress?: number;
+  statusMessage?: string; // Status message từ component cha (nếu có)
+  progress?: number; // Progress từ component cha (nếu có)
 }
 
 const AnalysisLayout = memo(
@@ -28,13 +29,18 @@ const AnalysisLayout = memo(
     canvasRef,
     result,
     error,
+    detectionResults,
     selectionButtons,
     colorPalette,
     actionButtons,
-    statusMessage = "Đang khởi tạo...",
-    progress = 0,
+    statusMessage: propStatusMessage = "Initializing...",
+    progress: propProgress = 0,
   }: AnalysisLayoutProps) => {
     const [showError, setShowError] = useState(false);
+
+    // State nội bộ để quản lý statusMessage và progress
+    const [statusMessage, setStatusMessage] = useState(propStatusMessage);
+    const [progress, setProgress] = useState(propProgress);
 
     useEffect(() => {
       if (error) {
@@ -46,6 +52,18 @@ const AnalysisLayout = memo(
       }
     }, [error]);
 
+    // Xử lý thông báo dựa trên detectionResults
+    useEffect(() => {
+      if (detectionResults?.hand?.isIndexRaised) {
+        setStatusMessage("Hand detected (index finger raised). Please lower your hand to continue analysis.");
+        setProgress(0);
+      } else {
+        // Nếu không có hand detection, sử dụng statusMessage và progress từ props
+        setStatusMessage(propStatusMessage);
+        setProgress(propProgress);
+      }
+    }, [detectionResults, propStatusMessage, propProgress]);
+
     const progressColor = useMemo(() => {
       if (progress === 0) return "bg-red-500";
       if (progress <= 20) return "bg-gray-500";
@@ -54,9 +72,15 @@ const AnalysisLayout = memo(
     }, [progress]);
 
     const statusIcon = useMemo(() => {
-      if (statusMessage.includes("Phát hiện tay (ngón trỏ giơ lên)")) return (
+      if (statusMessage.toLowerCase().includes("hand detected")) return (
         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m0 14v1m-6-6h1m10 0h-1M5.757 5.757l.707.707m11.072 11.072l-.707.707M5.757 18.243l.707-.707m11.072-11.072l-.707-.707M12 12h.01" />
+        </svg>
+      );
+      if (statusMessage.toLowerCase().includes("face not detected")) return (
+        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6" />
         </svg>
       );
       if (progress === 0) return (
@@ -122,7 +146,7 @@ const AnalysisLayout = memo(
                 playsInline
                 muted
               />
-              {statusMessage.includes("Phát hiện tay (ngón trỏ giơ lên)") && (
+              {statusMessage.toLowerCase().includes("hand detected") && (
                 <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center animate-pulse">
                   <svg className="w-12 h-12 text-white mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m0 14v1m-6-6h1m10 0h-1M5.757 5.757l.707.707m11.072 11.072l-.707.707M5.757 18.243l.707-.707m11.072-11.072l-.707-.707M12 12h.01" />
@@ -130,7 +154,7 @@ const AnalysisLayout = memo(
                   <p className="text-white text-xl font-semibold">{statusMessage}</p>
                 </div>
               )}
-              {!result && statusMessage.includes("Không phát hiện khuôn mặt") && (
+              {!result && statusMessage.toLowerCase().includes("face not detected") && (
                 <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center animate-pulse">
                   <svg className="w-12 h-12 text-white mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -147,7 +171,7 @@ const AnalysisLayout = memo(
               />
             </div>
           </div>
-          {selectionButtons && (<>{selectionButtons}</>)}
+          {selectionButtons && <>{selectionButtons}</>}
           <div
             className={`${selectionButtons ? "md:w-3/12" : "md:w-1/3"} bg-white p-4 rounded-xl shadow-md flex flex-col`}
           >
@@ -168,14 +192,14 @@ const AnalysisLayout = memo(
             
             {result ? (
               <div className={`text-base md:text-lg text-gray-700 mb-3 animate-fadeIn p-3 rounded-lg ${
-                result === "Warm" ? "bg-orange-100" : 
-                result === "Cool" ? "bg-blue-100" : 
+                result.toLowerCase() === "warm" ? "bg-orange-100" : 
+                result.toLowerCase() === "cool" ? "bg-blue-100" : 
                 "bg-gray-100"
               }`}>
                 <div className="flex items-center gap-2">
-                  {result === "Warm" && <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 2a8 8 0 0 0-8 8c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm0 2a6 6 0 0 1 6 6c0 1.66-.68 3.15-1.76 4.24l-1.41-1.41C15.55 14.1 16 13.1 16 12a4 4 0 0 0-4-4c-1.1 0-2.1.45-2.83 1.17l-1.41-1.41C8.85 6.68 10.34 6 12 6z"/></svg>}
-                  {result === "Cool" && <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 2a8 8 0 0 0-8 8c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm-2 6l2-2 2 2 2-2 2 2-2 2 2 2-2 2-2-2-2 2-2-2 2-2z"/></svg>}
-                  {result === "Neutral" && <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 2a8 8 0 0 0-8 8c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm-4 4h8v2H8zm0 4h8v2H8z"/></svg>}
+                  {result.toLowerCase() === "warm" && <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 2a8 8 0 0 0-8 8c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm0 2a6 6 0 0 1 6 6c0 1.66-.68 3.15-1.76 4.24l-1.41-1.41C15.55 14.1 16 13.1 16 12a4 4 0 0 0-4-4c-1.1 0-2.1.45-2.83 1.17l-1.41-1.41C8.85 6.68 10.34 6 12 6z"/></svg>}
+                  {result.toLowerCase() === "cool" && <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 2a8 8 0 0 0-8 8c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm-2 6l2-2 2 2 2-2 2 2-2 2 2 2-2 2-2-2-2 2-2-2 2-2z"/></svg>}
+                  {result.toLowerCase() === "neutral" && <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 2a8 8 0 0 0-8 8c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm-4 4h8v2H8zm0 4h8v2H8z"/></svg>}
                   <span>Your result is</span>
                   <span className="font-bold text-pink-600 ml-1">
                     <div dangerouslySetInnerHTML={{ __html: result }}></div>
@@ -255,8 +279,9 @@ const AnalysisLayout = memo(
     return (
       prevProps.result === nextProps.result &&
       prevProps.error === nextProps.error &&
-      prevProps.progress === nextProps.progress &&
-      prevProps.statusMessage === nextProps.statusMessage
+      prevProps.detectionResults === nextProps.detectionResults &&
+      prevProps.statusMessage === nextProps.statusMessage &&
+      prevProps.progress === nextProps.progress
     );
   }
 );

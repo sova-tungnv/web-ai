@@ -44,7 +44,7 @@ const modelConfigs: { [key: string]: any } = {
     class: PoseLandmarker,
     options: {
       baseOptions: {
-        modelAssetPath: `/models/pose_landmarker.task`,
+        modelAssetPath: `/models/pose_landmarker_lite.task`,
         delegate: "GPU",
       },
       runningMode: "VIDEO",
@@ -107,7 +107,7 @@ const handleDetect = async () => {
       }
     }
 
-    console.log("[VisionWorker] Posting detection result to main thread.");
+    console.log("[VisionWorker] Posting detection result to main thread.", results);
     self.postMessage({ type: "detectionResult", results });
   } catch (err) {
     console.error("[VisionWorker] Detection error:", err);

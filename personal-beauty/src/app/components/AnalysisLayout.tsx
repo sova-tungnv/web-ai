@@ -46,15 +46,19 @@ const AnalysisLayout = memo(
       }
     }, [error]);
 
-    // Tùy chỉnh màu và biểu tượng theo trạng thái
     const progressColor = useMemo(() => {
-      if (progress === 0) return "bg-red-500"; // Không phát hiện khuôn mặt
-      if (progress <= 20) return "bg-gray-500"; // Chưa đủ khung hình
-      if (progress <= 60) return "bg-yellow-500"; // Đang phân tích
-      return "bg-green-500"; // Hoàn tất
+      if (progress === 0) return "bg-red-500";
+      if (progress <= 20) return "bg-gray-500";
+      if (progress <= 60) return "bg-yellow-500";
+      return "bg-green-500";
     }, [progress]);
 
     const statusIcon = useMemo(() => {
+      if (statusMessage.includes("Phát hiện tay (ngón trỏ giơ lên)")) return (
+        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m0 14v1m-6-6h1m10 0h-1M5.757 5.757l.707.707m11.072 11.072l-.707.707M5.757 18.243l.707-.707m11.072-11.072l-.707-.707M12 12h.01" />
+        </svg>
+      );
       if (progress === 0) return (
         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -70,11 +74,10 @@ const AnalysisLayout = memo(
           <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       );
-    }, [progress]);
+    }, [progress, statusMessage]);
 
     return (
       <div className="flex flex-col gap-4 h-full min-h-[calc(100vh-2rem)] p-4 md:p-6 overflow-hidden bg-gradient-to-r from-pink-100 to-purple-100">
-        {/* Notification Bar */}
         {showError && (
           <div 
             className="fixed top-4 right-4 bg-red-500 text-white p-3 rounded-lg shadow-md max-w-md z-50 animate-slideIn"
@@ -89,7 +92,6 @@ const AnalysisLayout = memo(
           </div>
         )}
 
-        {/* Status Message and Progress - Always Visible */}
         <div className="bg-white p-3 rounded-lg shadow-sm mb-2 h-16 flex items-center">
           <div className="flex items-center w-full">
             {statusIcon}
@@ -106,7 +108,6 @@ const AnalysisLayout = memo(
         </div>
 
         <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 overflow-hidden">
-          {/* Video Container */}
           <div
             className={`${selectionButtons ? "md:w-7/12" : "md:w-2/3"} px-6 md:px-2 rounded-xl flex flex-col items-center`}
           >
@@ -121,9 +122,21 @@ const AnalysisLayout = memo(
                 playsInline
                 muted
               />
+              {statusMessage.includes("Phát hiện tay (ngón trỏ giơ lên)") && (
+                <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center animate-pulse">
+                  <svg className="w-12 h-12 text-white mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m0 14v1m-6-6h1m10 0h-1M5.757 5.757l.707.707m11.072 11.072l-.707.707M5.757 18.243l.707-.707m11.072-11.072l-.707-.707M12 12h.01" />
+                  </svg>
+                  <p className="text-white text-xl font-semibold">{statusMessage}</p>
+                </div>
+              )}
               {!result && statusMessage.includes("Không phát hiện khuôn mặt") && (
-                <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center animate-pulse">
-                  <p className="text-white text-lg font-semibold">{statusMessage}</p>
+                <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center animate-pulse">
+                  <svg className="w-12 h-12 text-white mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6" />
+                  </svg>
+                  <p className="text-white text-xl font-semibold">{statusMessage}</p>
                 </div>
               )}
               <canvas
@@ -135,7 +148,6 @@ const AnalysisLayout = memo(
             </div>
           </div>
           {selectionButtons && (<>{selectionButtons}</>)}
-          {/* Results Container */}
           <div
             className={`${selectionButtons ? "md:w-3/12" : "md:w-1/3"} bg-white p-4 rounded-xl shadow-md flex flex-col`}
           >

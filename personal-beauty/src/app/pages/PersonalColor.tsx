@@ -352,7 +352,12 @@ export default function PersonalColor() {
         offsetY = 0;
       }
 
-      if (detectionResults && detectionResults.face?.faceLandmarks && detectionResults.face?.faceLandmarks.length > 0) {
+      if (detectionResults.hand?.isIndexRaised) {
+        setStatusMessage("Phát hiện tay (ngón trỏ giơ lên). Vui lòng hạ tay để phân tích tông màu.");
+        setProgress(0);
+        setIsFrameStable(false);
+        setLandmarkHistory([]);
+      } else if (detectionResults && detectionResults.face?.faceLandmarks && detectionResults.face?.faceLandmarks.length > 0) {
         const landmarks = detectionResults.face?.faceLandmarks[0];
         checkFrameStability(landmarks);
 

@@ -57,6 +57,8 @@ let filesetResolver: any = null;
 let isDetecting = false;
 const frameQueue: any = [];
 const MAX_QUEUE_SIZE = 5;
+let lastIndexRaisedTime = 0;
+const INDEX_RAISED_TIMEOUT = 1500; // 1.5 giây timeout để chuyển sang các mô hình khác
 
 const isIndexRaised = (landmarks: any[]): boolean => {
   const THRESHOLD = 0.1;
@@ -68,8 +70,8 @@ const handleDetect = async () => {
   if (isDetecting || frameQueue.length === 0) return;
 
   const { imageBitmap, timestamp, modelTypes } = frameQueue.shift()!;
-   // Clear các frame cũ
-   while (frameQueue.length > 0) {
+  // Clear các frame cũ để đảm bảo xử lý tức thì
+  while (frameQueue.length > 0) {
     const dropped = frameQueue.shift();
     dropped?.imageBitmap?.close();
   }
@@ -80,6 +82,7 @@ const handleDetect = async () => {
     const results: { [key: string]: any } = {};
     let indexRaised = false;
 
+    // Ưu tiên phát hiện tay
     if (modelTypes.includes("hand") && models.has("hand")) {
       console.log("[VisionWorker] Detecting hand...");
       const handResult = await models.get("hand").detectForVideo(imageBitmap, timestamp);
@@ -89,6 +92,11 @@ const handleDetect = async () => {
         console.log(`[VisionWorker] Hand detected. Landmarks count: ${handResult.landmarks.length}`);
         indexRaised = isIndexRaised(handResult.landmarks[0]);
         results.hand.isIndexRaised = indexRaised;
+
+        if (indexRaised) {
+          lastIndexRaisedTime = timestamp;
+          console.log("[VisionWorker] Index finger raised, prioritizing hand.");
+        }
       } else {
         console.log("[VisionWorker] No hand landmarks detected.");
         results.hand.isIndexRaised = false;
@@ -97,7 +105,16 @@ const handleDetect = async () => {
       results.hand = { landmarks: [], isIndexRaised: false };
     }
 
-    if (!indexRaised) {
+    // Kiểm tra timeout: chỉ xử lý các mô hình khác nếu không phát hiện index raised trong 1.5 giây
+    const now = timestamp;
+    if (indexRaised || (now - lastIndexRaisedTime < INDEX_RAISED_TIMEOUT)) {
+      if (indexRaised) {
+        console.log("[VisionWorker] Index raised detected, skipping other models.");
+      } else {
+        console.log("[VisionWorker] Index raised timeout not reached, skipping other models.");
+      }
+    } else {
+      // Xử lý các mô hình khác nếu không phát hiện index raised hoặc timeout đã hết
       const otherModels = modelTypes.filter((m: string) => m !== "hand");
       for (const modelType of otherModels) {
         if (models.has(modelType)) {

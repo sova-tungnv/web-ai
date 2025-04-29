@@ -109,19 +109,19 @@ export default function PersonalColor() {
     const areas = ["face", "hair", "lips", "pupil", "eyebrow"];
     const colorPalette = {
         warm: [
-            { color: "#FFD700", label: "Best" },
-            { color: "#FF4500", label: "Best" },
-            { color: "#8B0000", label: "Worst" },
+            { color: "#FFD700", label: "Best for clothing" },
+            { color: "#FF4500", label: "Best for makeup" },
+            { color: "#8B0000", label: "Avoid for clothing" },
         ],
         cool: [
-            { color: "#00CED1", label: "Best" },
-            { color: "#FF69B4", label: "Best" },
-            { color: "#FFA500", label: "Worst" },
+            { color: "#00CED1", label: "Best for clothing" },
+            { color: "#FF69B4", label: "Best for makeup" },
+            { color: "#FFA500", label: "Avoid for clothing" },
         ],
         neutral: [
-            { color: "#C0C0C0", label: "Best" },
-            { color: "#F5F5DC", label: "Best" },
-            { color: "#FF0000", label: "Worst" },
+            { color: "#C0C0C0", label: "Best for clothing" },
+            { color: "#F5F5DC", label: "Best for makeup" },
+            { color: "#FF0000", label: "Avoid for clothing" },
         ],
     };
 
@@ -506,7 +506,7 @@ export default function PersonalColor() {
             detectionResults={detectionResults}
             selectionButtons={selectionButtons}
             colorPalette={colorPaletteElement}
-            actionButtons={actionButtons}
+            //actionButtons={actionButtons}
             statusMessage={statusMessage}
             progress={progress}
         />

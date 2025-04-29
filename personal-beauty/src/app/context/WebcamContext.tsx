@@ -218,11 +218,11 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
       
       // Thêm hiệu ứng khi bàn tay mở
-      if (isOpenHand) {
-        cursorRef.current.classList.add('open-hand');
-      } else {
-        cursorRef.current.classList.remove('open-hand');
-      }
+      // if (isOpenHand) {
+      //   cursorRef.current.classList.add('open-hand');
+      // } else {
+      //   cursorRef.current.classList.remove('open-hand');
+      // }
     }
 
     // Cập nhật state isHandActive khi phát hiện tay
@@ -673,10 +673,10 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         playsInline 
         muted
       />
-      <div 
+      {/* <div 
         ref={cursorRef}
         className="cursor hidden"
-      />
+      /> */}
       {/* Thêm CSS cho cursor */}
       <style jsx global>{`
         .hidden {

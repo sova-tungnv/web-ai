@@ -52,7 +52,7 @@ export default function HairColor() {
       { name: "Xám lạnh", rgb: [130, 130, 130] }       
     ];
 
-    function getNearestHairColorName(r, g, b) {
+    function getNearestHairColorName(r: number, g: number, b: number) {
       let minDistance = Infinity;
       let bestMatch = "Không xác định";
     

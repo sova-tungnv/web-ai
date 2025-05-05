@@ -67,7 +67,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [VIEWS.HOME]: ["hand"],
     [VIEWS.HAIR_COLOR]: ["hand"],
     [VIEWS.PERSONAL_MAKEUP]: ["hand"],
-    [VIEWS.COSMETIC_SURGERY]: ["face", "pose"],
+    [VIEWS.COSMETIC_SURGERY]: ["hand", "face"],
   };
 
   // Hàm kiểm tra cử chỉ tay (dùng cho luồng full detection)
@@ -203,7 +203,6 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const landmarks = results.hand.landmarks[0];
           const isIndexRaised = results.hand.isIndexRaised || false;
           const now = performance.now();
-
           if (isIndexRaised) {
             if (!indexRaiseStartTime.current) indexRaiseStartTime.current = now;
             if (now - indexRaiseStartTime.current >= 300) {

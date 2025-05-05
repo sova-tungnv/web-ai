@@ -171,53 +171,6 @@ export default function PersonalColor() {
         [palette, selectedColor]
     );
 
-    const actionButtons = useMemo(
-        () => (
-            <>
-                {noFaceDetectedDuration > 30000 && (
-                    <button
-                        className="bg-blue-500 text-white px-12 py-6 rounded-lg text-3xl hover:bg-blue-600 transition relative mb-2"
-                        onClick={async () => {
-                            setStatusMessage("Refreshing camera...");
-                            setProgress(50);
-                            await restartStream();
-                            setStatusMessage("Initializing camera...");
-                            setProgress(20);
-                            setNoFaceDetectedDuration(0);
-                        }}
-                    >
-                        Refresh
-                    </button>
-                )}
-                <button
-                    className={`bg-pink-500 text-white px-12 py-6 rounded-lg text-3xl hover:bg-pink-600 transition relative ${!colorTone ? "opacity-50 cursor-not-allowed" : ""
-                        }`}
-                    disabled={!colorTone}
-                    onClick={() => {
-                        if (!colorTone) return;
-                        const canvas = canvasRef.current;
-                        if (canvas) {
-                            setStatusMessage("Saving image...");
-                            setProgress(80);
-                            const dataUrl = canvas.toDataURL("image/png");
-                            const link = document.createElement("a");
-                            link.href = dataUrl;
-                            link.download = "personal-color-result.png";
-                            link.click();
-                            setTimeout(() => {
-                                setStatusMessage("Analysis completed!");
-                                setProgress(100);
-                            }, 500);
-                        }
-                    }}
-                >
-                    Capture
-                </button>
-            </>
-        ),
-        [colorTone, noFaceDetectedDuration, restartStream]
-    );
-
     useEffect(() => {
         setCurrentView(VIEWS.PERSONAL_COLOR);
     }, []);

@@ -4,7 +4,7 @@
 
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import { useState, useEffect, useRef } from "react";
 import { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import AnalysisLayout from "../components/AnalysisLayout";
@@ -21,6 +21,17 @@ export default function CosmeticSurgery() {
     } = useWebcam();
     const { setIsLoading } = useLoading();
     const [error, setError] = useState<string | null>(null);
+    const lastStableTime = useRef<number | null>(null);
+    const lastUnstableTime = useRef<number | null>(null);
+    const STABILITY_THRESHOLD = 15;
+    const HISTORY_SIZE = 5;
+    const STABILITY_DURATION = 1000;
+    const MIN_STABLE_DURATION = 500;
+    const [statusMessage, setStatusMessage] = useState<string>("Initializing camera...");
+    const [isFrameStable, setIsFrameStable] = useState(false);
+    const landmarkHistoryRef = useRef<{ x: number; y: number }[][]>([]);
+    const [noFaceDetectedDuration, setNoFaceDetectedDuration] = useState<number>(0);
+    const [progress, setProgress] = useState<number>(0);
     const [isVideoReady, setIsVideoReady] = useState(false);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -34,6 +45,83 @@ export default function CosmeticSurgery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const checkFrameStability = useCallback((landmarks: { x: number; y: number }[]) => {
+        const newHistory = [...landmarkHistoryRef.current, landmarks].slice(-HISTORY_SIZE);
+    
+        if (!detectionResults.face?.faceLandmarks) {
+            setNoFaceDetectedDuration((prev) => prev + 1000);
+            if (noFaceDetectedDuration >= 30000) {
+                setStatusMessage("Face not detected for a long time. Please refresh the camera.");
+            } else {
+                setStatusMessage("Face not detected. Please adjust your position.");
+            }
+            setProgress(0);
+            setIsFrameStable(false);
+            landmarkHistoryRef.current = []; // reset
+            return;
+        }
+    
+        setNoFaceDetectedDuration(0);
+    
+        if (newHistory.length < HISTORY_SIZE) {
+            setStatusMessage("Collecting face data...");
+            setProgress(20);
+            landmarkHistoryRef.current = newHistory;
+            return;
+        }
+    
+        let totalDeviation = 0;
+        let deviationCount = 0;
+    
+        for (let i = 1; i < newHistory.length; i++) {
+            for (let j = 0; j < landmarks.length; j++) {
+                const dx = (newHistory[i][j].x - newHistory[i - 1][j].x) * 640;
+                const dy = (newHistory[i][j].y - newHistory[i - 1][j].y) * 480;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                totalDeviation += distance;
+                deviationCount++;
+            }
+        }
+    
+        const averageDeviation = deviationCount > 0 ? totalDeviation / deviationCount : 0;
+        const now = performance.now();
+        const isStable = averageDeviation < STABILITY_THRESHOLD;
+        console.log(12321, isStable);
+        if (isStable && !lastStableTime.current) {
+            lastStableTime.current = now;
+            setStatusMessage("Analyzing face...");
+            setProgress(60);
+        } else if (isStable && lastStableTime.current && now - lastStableTime.current >= STABILITY_DURATION) {
+            setIsFrameStable(true);
+            setStatusMessage("Analysis completed!");
+            setProgress(100);
+            lastUnstableTime.current = null;
+        } else if (!isStable) {
+            if (lastStableTime.current && now - lastStableTime.current < MIN_STABLE_DURATION) {
+                landmarkHistoryRef.current = newHistory;
+                return;
+            }
+            if (!lastUnstableTime.current) {
+                lastUnstableTime.current = now;
+            }
+            lastStableTime.current = null;
+            setIsFrameStable(false);
+            setStatusMessage("Please keep your face steady for analysis");
+            setProgress(20);
+        }
+    
+        landmarkHistoryRef.current = newHistory;
+    }, [
+        HISTORY_SIZE,
+        STABILITY_THRESHOLD,
+        STABILITY_DURATION,
+        MIN_STABLE_DURATION,
+        detectionResults,
+        noFaceDetectedDuration,
+        setProgress,
+        setStatusMessage,
+    ]);
+
     // Kết nối video stream
     useEffect(() => {
         if (stream && videoRef.current) {
@@ -44,6 +132,8 @@ export default function CosmeticSurgery() {
                 });
                 setIsVideoReady(true);
                 setIsLoading(false);
+                setStatusMessage("Please keep your face steady for analysis");
+                setProgress(20);
             };
         }
     }, [stream, setIsLoading]);
@@ -339,12 +429,12 @@ export default function CosmeticSurgery() {
     const detect = async () => {
       try {
         const now = performance.now();
-        const minInterval = detectionResults.face?.faceLandmarks?.length > 0 ? 33 : 100;
-        if (now - lastDetectTime.current < minInterval) {
-          animationFrameId.current = requestAnimationFrame(detect);
-          return;
+        if (now - lastDetectTime.current < 1000 / 60) {
+            animationFrameId.current = requestAnimationFrame(detect);
+            return;
         }
         lastDetectTime.current = now;
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const videoRatio = video.videoWidth / video.videoHeight;
         const canvasRatio = canvas.width / canvas.height;
@@ -363,8 +453,11 @@ export default function CosmeticSurgery() {
         ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
         if (detectionResults?.face?.faceLandmarks && detectionResults?.face?.faceLandmarks.length > 0) {
           const landmarks = detectionResults?.face?.faceLandmarks[0];
+          checkFrameStability(landmarks);
           // analyzeFace(landmarks);
-          drawingFaceGrid(landmarks);
+          if (isFrameStable) {
+            drawingFaceGrid(landmarks);
+          }
         }
       } catch (err) {
         console.error("[CosmeticSurgery] Error during face detection:", err);
@@ -382,6 +475,16 @@ export default function CosmeticSurgery() {
     };
   }, [stream, isVideoReady, detectionResults]);
 
+  useEffect(() => {
+      const interval = setInterval(() => {
+          if (!detectionResults || !detectionResults.face?.faceLandmarks) {
+              setNoFaceDetectedDuration((prev) => prev + 1000);
+          }
+      }, 1000);
+
+      return () => clearInterval(interval);
+  }, [detectionResults]);
+
   return (
     <AnalysisLayout
       title="Cosmetic Surgery"
@@ -390,6 +493,9 @@ export default function CosmeticSurgery() {
       canvasRef={canvasRef}
       result={result}
       error={error || webcamError}
+      statusMessage={statusMessage}
+      progress={progress}
+      detectionResults={detectionResults}
     />
   );
 }

@@ -147,7 +147,7 @@ const AnalysisLayout = memo(
                 muted
               />
               {statusMessage.toLowerCase().includes("hand detected") && (
-                <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center animate-pulse">
+                <div className="absolute inset-0 bg-black z-[20] bg-opacity-50 flex flex-col items-center justify-center animate-pulse">
                   <svg className="w-12 h-12 text-white mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m0 14v1m-6-6h1m10 0h-1M5.757 5.757l.707.707m11.072 11.072l-.707.707M5.757 18.243l.707-.707m11.072-11.072l-.707-.707M12 12h.01" />
                   </svg>
@@ -155,7 +155,7 @@ const AnalysisLayout = memo(
                 </div>
               )}
               {!result && statusMessage.toLowerCase().includes("face not detected") && (
-                <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center animate-pulse">
+                <div className="absolute inset-0 bg-black z-[20] bg-opacity-50 flex flex-col items-center justify-center animate-pulse">
                   <svg className="w-12 h-12 text-white mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 21v-6a2 2 0 012-2h2a2 2 0 012 2v6" />

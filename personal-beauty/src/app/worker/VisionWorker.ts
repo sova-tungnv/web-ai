@@ -61,16 +61,27 @@ let lastIndexRaisedTime = 0;
 const INDEX_RAISED_TIMEOUT = 1500; // 1.5 giây timeout để chuyển sang các mô hình khác
 
 const isIndexRaised = (landmarks: any[]): boolean => {
-  if (!landmarks || landmarks.length < 9) return false;
+  if (!landmarks || landmarks.length < 17) return false;
 
-  const p5 = landmarks[5];
-  const p8 = landmarks[8];
+  const p5 = landmarks[5];  // gốc ngón trỏ
+  const p8 = landmarks[8];  // đầu ngón trỏ
+  const p12 = landmarks[12]; // đầu ngón giữa
+  const p16 = landmarks[16]; // đầu ngón đeo nhẫn
+
+  // 1. Kiểm tra góc giữa p5 → p8
   const dx = p8.x - p5.x;
   const dy = p8.y - p5.y;
-  const angle = Math.atan2(dy, dx) * (180 / Math.PI); // Góc so với trục X
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI); // so với trục X
 
-  // Xét xem góc có nằm gần -90 độ (chỉ lên trên) trong khoảng ±45 độ không
-  return Math.abs(angle + 90) < 45;
+  const angleOk = Math.abs(angle + 90) < 45;
+
+  // 2. Đảm bảo đầu ngón trỏ thấp hơn (cao hơn trên trục Y) so với các ngón khác
+  const yOk = p8.y < p12.y - 0.02 && p8.y < p16.y - 0.02;
+
+  // 3. (Tùy chọn) Đảm bảo trỏ không bị gập xuống
+  const isNotFolded = p8.y < p5.y;
+
+  return angleOk && yOk && isNotFolded;
 };
 
 const handleDetect = async () => {

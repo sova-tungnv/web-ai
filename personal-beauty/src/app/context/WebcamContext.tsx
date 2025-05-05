@@ -59,6 +59,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isHandDetectionEnabled, setIsHandDetectionEnabled] = useState(true); // Đặt mặc định là false
   const [isIndexFingerRaised, setIsIndexFingerRaised] = useState(false);
   const [detectionResults, setDetectionResults] = useState<{ [key: string]: any }>({});
+  const indexRaiseStartTime = useRef<number | null>(null);
 
   const modelRequirements: { [key: string]: string[] } = {
     [VIEWS.PERSONAL_COLOR]: ["hand", "face"],
@@ -201,10 +202,22 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (results?.hand?.landmarks?.length > 0) {
           const landmarks = results.hand.landmarks[0];
           const isIndexRaised = results.hand.isIndexRaised || false;
+          const now = performance.now();
+
+          if (isIndexRaised) {
+            if (!indexRaiseStartTime.current) indexRaiseStartTime.current = now;
+            if (now - indexRaiseStartTime.current >= 300) {
+              setIsIndexFingerRaised(true);
+            }
+          } else {
+            indexRaiseStartTime.current = null;
+            setIsIndexFingerRaised(false);
+          }
+
+
           const detected = detectFull(landmarks, isIndexRaised);
           setHandData(detected);
           setDetectionResults(results);
-          setIsIndexFingerRaised(isIndexRaised);
         } else {
           setHandData({
             isHandDetected: false,

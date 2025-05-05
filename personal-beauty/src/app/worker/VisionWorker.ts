@@ -61,9 +61,16 @@ let lastIndexRaisedTime = 0;
 const INDEX_RAISED_TIMEOUT = 1500; // 1.5 giây timeout để chuyển sang các mô hình khác
 
 const isIndexRaised = (landmarks: any[]): boolean => {
-  const THRESHOLD = 0.1;
   if (!landmarks || landmarks.length < 9) return false;
-  return landmarks[8].y < landmarks[5].y - THRESHOLD;
+
+  const p5 = landmarks[5];
+  const p8 = landmarks[8];
+  const dx = p8.x - p5.x;
+  const dy = p8.y - p5.y;
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI); // Góc so với trục X
+
+  // Xét xem góc có nằm gần -90 độ (chỉ lên trên) trong khoảng ±45 độ không
+  return Math.abs(angle + 90) < 45;
 };
 
 const handleDetect = async () => {

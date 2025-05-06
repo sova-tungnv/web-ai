@@ -41,7 +41,6 @@ const AnalysisLayout = memo(
     // State nội bộ để quản lý statusMessage và progress
     const [statusMessage, setStatusMessage] = useState(propStatusMessage);
     const [progress, setProgress] = useState(propProgress);
-
     useEffect(() => {
       if (error) {
         setShowError(true);
@@ -281,6 +280,7 @@ const AnalysisLayout = memo(
       prevProps.error === nextProps.error &&
       prevProps.detectionResults === nextProps.detectionResults &&
       prevProps.statusMessage === nextProps.statusMessage &&
+      prevProps.selectionButtons === nextProps.selectionButtons &&
       prevProps.progress === nextProps.progress
     );
   }

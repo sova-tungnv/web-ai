@@ -1,18 +1,13 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/pages/PersonalColor.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import {
-    DrawingUtils,
-    FaceLandmarker,
-    FilesetResolver,
-    NormalizedLandmark,
-} from "@mediapipe/tasks-vision";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import AnalysisLayout from "../components/AnalysisLayout";
 import { useWebcam } from "../context/WebcamContext";
 import { useLoading } from "../context/LoadingContext"; // Thêm import
-import { useHandControl } from "../context/HandControlContext";
 import { VIEWS } from "../constants/views";
 
 type FacialFeatures = {
@@ -29,66 +24,26 @@ type FacialFeatures = {
 };
 
 export default function PersonalColor() {
-    const { stream, error: webcamError, restartStream } = useWebcam();
+    const { stream, error: webcamError, restartStream, detectionResults, setCurrentView } = useWebcam();
     const { setIsLoading } = useLoading(); // Sử dụng context
-    const { registerElement, unregisterElement } = useHandControl();
     const [error, setError] = useState<string | null>(null);
-    const [isFaceLandmarkerReady, setIsFaceLandmarkerReady] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
-    const [isFaceDetectionActive, setIsFaceDetectionActive] = useState(true); // Thêm trạng thái chế độ
-    const [statusMessage, setStatusMessage] = useState("Face Detection Active"); // Thêm thông báo trạng thái
-    const [twoFingersProgress, setTwoFingersProgress] = useState(0); // Thêm tiến trình giơ 2 ngón tay
+    const lastStableTime = useRef<number | null>(null);
+    const lastUnstableTime = useRef<number | null>(null);
+    const STABILITY_THRESHOLD = 15;
+    const HISTORY_SIZE = 5;
+    const STABILITY_DURATION = 1000;
+    const MIN_STABLE_DURATION = 500;
+    const [statusMessage, setStatusMessage] = useState<string>("Initializing camera...");
+    const [isFrameStable, setIsFrameStable] = useState(false);
+    const landmarkHistoryRef = useRef<{ x: number; y: number }[][]>([]);
+    const [noFaceDetectedDuration, setNoFaceDetectedDuration] = useState<number>(0);
+    const [progress, setProgress] = useState<number>(0);
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
     const displayVideoRef = useRef<HTMLVideoElement>(null);
     const animationFrameId = useRef<number | null>(null);
     const [makeupSuggestion, setMakeupSuggestion] = useState<any | null>(null);
-    const isApplyMakeupRef = useRef(true); 
     const lastDetectTime = useRef(0);
-
-    useEffect(() => {
-        const initializeFaceLandmarker = async () => {
-            try {
-                const filesetResolver = await FilesetResolver.forVisionTasks(
-                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
-                );
-                const faceLandmarker = await FaceLandmarker.createFromOptions(
-                    filesetResolver,
-                    {
-                        baseOptions: {
-                            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-                            delegate: "GPU",
-                        },
-                        outputFaceBlendshapes: true,
-                        runningMode: "VIDEO",
-                        numFaces: 1,
-                    }
-                );
-
-                faceLandmarkerRef.current = faceLandmarker;
-                setIsFaceLandmarkerReady(true);
-            } catch (err) {
-                console.error(
-                    "[PersonalColor] Error initializing FaceLandmarker:",
-                    err
-                );
-                setError("Failed to initialize face detection.");
-            }
-        };
-
-        initializeFaceLandmarker();
-
-        return () => {
-            if (faceLandmarkerRef.current) {
-                faceLandmarkerRef.current.close();
-                faceLandmarkerRef.current = null;
-            }
-            setIsFaceLandmarkerReady(false);
-            if (animationFrameId.current) {
-                cancelAnimationFrame(animationFrameId.current);
-            }
-        };
-    }, []);
 
     function analyzeFacialFeatures(
         landmarks: NormalizedLandmark[]
@@ -247,38 +202,105 @@ export default function PersonalColor() {
         return suggestions.join("<br/>");
     }
 
+    useEffect(() => {
+        setCurrentView(VIEWS.COSMETIC_SURGERY)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // Kết nối video stream
     useEffect(() => {
         if (stream && displayVideoRef.current) {
             displayVideoRef.current.srcObject = stream;
-            displayVideoRef.current.play().catch((err) => {
-                console.error("[PersonalColor] Error playing video:", err);
-            });
-
-            const checkVideoReady = () => {
-                if (
-                    displayVideoRef.current &&
-                    displayVideoRef.current.readyState >= 4
-                ) {
-                    setIsVideoReady(true);
-                    setIsLoading(false); // Tắt loading qua context
-                } else {
-                    setTimeout(checkVideoReady, 500);
-                }
+            displayVideoRef.current.onloadedmetadata = () => {
+                displayVideoRef.current!.play().catch((err: any) => {
+                    console.error("[PersonalColor] Error playing video:", err);
+                });
+                setIsVideoReady(true);
+                setIsLoading(false);
+                setStatusMessage("Please keep your face steady for analysis");
+                setProgress(20);
             };
-
-            checkVideoReady();
         }
     }, [stream, setIsLoading]);
 
+    const checkFrameStability = useCallback((landmarks: { x: number; y: number }[]) => {
+        const newHistory = [...landmarkHistoryRef.current, landmarks].slice(-HISTORY_SIZE);
+    
+        if (!detectionResults.face?.faceLandmarks) {
+            setNoFaceDetectedDuration((prev) => prev + 1000);
+            if (noFaceDetectedDuration >= 30000) {
+                setStatusMessage("Face not detected for a long time. Please refresh the camera.");
+            } else {
+                setStatusMessage("Face not detected. Please adjust your position.");
+            }
+            setProgress(0);
+            setIsFrameStable(false);
+            landmarkHistoryRef.current = []; // reset
+            return;
+        }
+    
+        setNoFaceDetectedDuration(0);
+    
+        if (newHistory.length < HISTORY_SIZE) {
+            setStatusMessage("Collecting face data...");
+            setProgress(20);
+            landmarkHistoryRef.current = newHistory;
+            return;
+        }
+    
+        let totalDeviation = 0;
+        let deviationCount = 0;
+    
+        for (let i = 1; i < newHistory.length; i++) {
+            for (let j = 0; j < landmarks.length; j++) {
+                const dx = (newHistory[i][j].x - newHistory[i - 1][j].x) * 640;
+                const dy = (newHistory[i][j].y - newHistory[i - 1][j].y) * 480;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                totalDeviation += distance;
+                deviationCount++;
+            }
+        }
+    
+        const averageDeviation = deviationCount > 0 ? totalDeviation / deviationCount : 0;
+        const now = performance.now();
+        const isStable = averageDeviation < STABILITY_THRESHOLD;
+        if (isStable && !lastStableTime.current) {
+            lastStableTime.current = now;
+            setStatusMessage("Analyzing face...");
+            setProgress(60);
+        } else if (isStable && lastStableTime.current && now - lastStableTime.current >= STABILITY_DURATION) {
+            setIsFrameStable(true);
+            setStatusMessage("Analysis completed!");
+            setProgress(100);
+            lastUnstableTime.current = null;
+        } else if (!isStable) {
+            if (lastStableTime.current && now - lastStableTime.current < MIN_STABLE_DURATION) {
+                landmarkHistoryRef.current = newHistory;
+                return;
+            }
+            if (!lastUnstableTime.current) {
+                lastUnstableTime.current = now;
+            }
+            lastStableTime.current = null;
+            setIsFrameStable(false);
+            setStatusMessage("Please keep your face steady for analysis");
+            setProgress(20);
+        }
+    
+        landmarkHistoryRef.current = newHistory;
+    }, [
+        HISTORY_SIZE,
+        STABILITY_THRESHOLD,
+        STABILITY_DURATION,
+        MIN_STABLE_DURATION,
+        detectionResults,
+        noFaceDetectedDuration,
+        setProgress,
+        setStatusMessage,
+    ]);
+
     useEffect(() => {
-        if (
-            !isFaceLandmarkerReady ||
-            !stream ||
-            !canvasRef.current ||
-            !displayVideoRef.current ||
-            !isFaceDetectionActive
-        ) {
+        if (!stream || !canvasRef.current || !displayVideoRef.current || !isVideoReady) {
             return;
         }
         const video = displayVideoRef.current;
@@ -289,73 +311,24 @@ export default function PersonalColor() {
             return;
         }
 
-        const waitForVideoReady = async () => {
-            let retries = 5;
-            while (retries > 0 && video.readyState < 4) {
-                await new Promise((resolve) => setTimeout(resolve, 2000));
-                retries--;
-                if (video.readyState < 4) {
-                    await restartStream();
-                }
-            }
-            if (video.readyState < 4) {
-                setError("Failed to load webcam video for face detection.");
-                return false;
-            }
-            return true;
-        };
-
         const detect = async () => {
-            if (!faceLandmarkerRef.current) {
-                animationFrameId.current = requestAnimationFrame(detect);
-                return;
-            }
-
-            const isVideoReady = await waitForVideoReady();
-            if (!isVideoReady) {
-                return;
-            }
-
             try {
                 const now = performance.now();
-                if (now - lastDetectTime.current < 120) { // 10 FPS
+                if (now - lastDetectTime.current < 1000 / 60) {
                     animationFrameId.current = requestAnimationFrame(detect);
                     return;
                 }
-
                 lastDetectTime.current = now;
-                // ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                // const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const results =  faceLandmarkerRef.current.detectForVideo(video, now);
-                if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                    const landmarks = results.faceLandmarks[0];
+                if (detectionResults?.face?.faceLandmarks && detectionResults?.face?.faceLandmarks.length > 0) {
+                    const landmarks = detectionResults?.face?.faceLandmarks[0];
+                    checkFrameStability(landmarks);
                     const features = analyzeFacialFeatures(landmarks);
                     const suggestion = generateMakeupSuggestion(features);
 
                     // Làm sạch canvas trước khi vẽ
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                    const videoAspect = video.videoWidth / video.videoHeight;
-                    const canvasAspect = canvas.width / canvas.height;
-    
-                    let drawWidth, drawHeight, offsetX, offsetY;
-    
-                    if (videoAspect > canvasAspect) {
-                        drawWidth = canvas.width;
-                        drawHeight = canvas.width / videoAspect;
-                        offsetX = 0;
-                        offsetY = (canvas.height - drawHeight) / 2;
-                    } else {
-                        drawHeight = canvas.height;
-                        drawWidth = canvas.height * videoAspect;
-                        offsetY = 0;
-                        offsetX = (canvas.width - drawWidth) / 2;
-                    }
-    
-                    ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
-
-                    if (isApplyMakeupRef.current) {
-                        isApplyMakeupRef.current = false;
+                    if (isFrameStable) {
                         drawMakeup(
                             ctx,
                             landmarks,
@@ -363,8 +336,6 @@ export default function PersonalColor() {
                             video.videoHeight
                         );
                     }
-
-                    setStatusMessage("ok");
 
                     setMakeupSuggestion(`${suggestion}`);
                 } else {
@@ -387,7 +358,7 @@ export default function PersonalColor() {
                 cancelAnimationFrame(animationFrameId.current);
             }
         };
-    }, [isFaceLandmarkerReady, stream, restartStream]);
+    }, [stream, restartStream, detectionResults]);
 
     function drawMakeup(
         ctx: CanvasRenderingContext2D,
@@ -605,8 +576,17 @@ export default function PersonalColor() {
         ctx.fillStyle = "rgba(197, 175, 163, 0.15)";
         ctx.fill();
         ctx.restore();
-        isApplyMakeupRef.current = true;
     }
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (!detectionResults || !detectionResults.face?.faceLandmarks) {
+                setNoFaceDetectedDuration((prev) => prev + 1000);
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [detectionResults]);
 
     return (
         <AnalysisLayout
@@ -616,8 +596,9 @@ export default function PersonalColor() {
             canvasRef={canvasRef}
             result={makeupSuggestion}
             error={error || webcamError}
-            statusMessage={statusMessage} // Truyền statusMessage
-            progress={twoFingersProgress} // Truyền progress
+            statusMessage={statusMessage}
+            progress={progress}
+            detectionResults={detectionResults}
         />
     );
 }

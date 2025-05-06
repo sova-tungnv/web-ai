@@ -248,89 +248,107 @@ export default function HairColor() {
       if (result?.hair) {
         const maskData = result.hair.mask;
 
-        // const video = displayVideoRef.current;
         const canvas = canvasRef.current;
         const ctx = ctxRef.current;
-        // Làm sạch canvas trước khi vẽ
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        function blurMask(maskData: any, width: any, height: any) {
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = width;
+          tempCanvas.height = height;
+          const tempCtx = tempCanvas.getContext('2d') as any;
+        
+          const imageData = tempCtx.createImageData(width, height);
+          const data = imageData.data;
+          for (let i = 0; i < maskData.length; i++) {
+            const value = maskData[i] * 255;
+            data[i * 4] = value; // R
+            data[i * 4 + 1] = value; // G
+            data[i * 4 + 2] = value; // B
+            data[i * 4 + 3] = 255; // Alpha
+          }
+          tempCtx.putImageData(imageData, 0, 0);
 
+          tempCtx.filter = 'blur(2px)'; 
+          tempCtx.drawImage(tempCanvas, 0, 0);
+
+          const blurredImageData = tempCtx.getImageData(0, 0, width, height);
+          const blurredData = new Float32Array(maskData.length);
+          for (let i = 0; i < maskData.length; i++) {
+            blurredData[i] = blurredImageData.data[i * 4] / 255;
+          }
+
+          return blurredData;
+        }
         const imageData = ctxRef.current.getImageData(0, 0, result.hair.width, result.hair.height);
         const data = imageData.data;
+        const blurredMaskData = blurMask(maskData, result.hair.width, result.hair.height);
+        
+        if (selectedHairColor.current) {
+          for (let i = 0; i < blurredMaskData.length; i++) {
+            if (blurredMaskData[i] > 0) { 
+              const pixelIndex = i * 4;
+              const blendAlpha = 0.5 * blurredMaskData[i];
+              const overlayOpacity = 0.5 * blurredMaskData[i]; 
+        
+              // Blend RGB values
+              data[pixelIndex] =
+                data[pixelIndex] * (1 - blendAlpha) +
+                selectedHairColor.current[0] * blendAlpha;
+              data[pixelIndex + 1] =
+                data[pixelIndex + 1] * (1 - blendAlpha) +
+                selectedHairColor.current[1] * blendAlpha;
+              data[pixelIndex + 2] =
+                data[pixelIndex + 2] * (1 - blendAlpha) +
+                selectedHairColor.current[2] * blendAlpha;
+        
+              data[pixelIndex + 3] = Math.round(255 * overlayOpacity);
+            }
+          }
+        }
+        
+        ctxRef.current.putImageData(imageData, 0, 0);
         const hairPixelIndices = [];
         for (let i = 0; i < maskData.length; i++) {
           if (maskData[i] === 1) {
-            hairPixelIndices.push(i); // Lưu chỉ số pixel thuộc tóc
+            hairPixelIndices.push(i);
           }
         }
-        if (selectedHairColor.current) {
+
+        if (!hairPixelIndices || hairPixelIndices.length === 0) {
+          setMakeupSuggestion("Hair color cannot be detected.");
+        } else {
+          let rTotal = 0,
+            gTotal = 0,
+            bTotal = 0;
           for (const i of hairPixelIndices) {
             const pixelIndex = i * 4;
-            const blendAlpha = 0.5; // Controls RGB blending ratio
-            const overlayOpacity = 0.5; // Controls overall opacity (adjust as needed)
-        
-            // Blend RGB values
-            data[pixelIndex] =
-              data[pixelIndex] * (1 - blendAlpha) +
-              selectedHairColor.current[0] * blendAlpha; // Red
-            data[pixelIndex + 1] =
-              data[pixelIndex + 1] * (1 - blendAlpha) +
-              selectedHairColor.current[1] * blendAlpha; // Green
-            data[pixelIndex + 2] =
-              data[pixelIndex + 2] * (1 - blendAlpha) +
-              selectedHairColor.current[2] * blendAlpha; // Blue
-        
-            // Set alpha to achieve semi-transparency
-            data[pixelIndex + 3] = Math.round(255 * overlayOpacity); // e.g., 50% opacity = 127.5
+            rTotal += data[pixelIndex];
+            gTotal += data[pixelIndex + 1];
+            bTotal += data[pixelIndex + 2];
           }
+
+          const pixelCount = hairPixelIndices.length;
+          const avgR = Math.round(rTotal / pixelCount);
+          const avgG = Math.round(gTotal / pixelCount);
+          const avgB = Math.round(bTotal / pixelCount);
+
+          const smoothingFactor = 0.8;
+          const prevAvgColor = prevAvgColorRef.current || { r: 0, g: 0, b: 0 };
+          const smoothedR = Math.round(
+            smoothingFactor * prevAvgColor.r + (1 - smoothingFactor) * avgR
+          );
+          const smoothedG = Math.round(
+            smoothingFactor * prevAvgColor.g + (1 - smoothingFactor) * avgG
+          );
+          const smoothedB = Math.round(
+            smoothingFactor * prevAvgColor.b + (1 - smoothingFactor) * avgB
+          );
+          prevAvgColorRef.current = { r: smoothedR, g: smoothedG, b: smoothedB };
+
+          const hairColorName = getNearestHairColorName(smoothedR, smoothedG, smoothedB);
+          setMakeupSuggestion(`Your hair color is: ${hairColorName}.`);
         }
-
-        ctxRef.current.putImageData(imageData, 0, 0);
-        if (hairPixelIndices.length === 0) {
-          setMakeupSuggestion("Hair color cannot be detected.");
-          return;
-        }
-
-        // Tính toán màu trung bình của tóc
-        let rTotal = 0,
-          gTotal = 0,
-          bTotal = 0;
-        for (const i of hairPixelIndices) {
-          const pixelIndex = i * 4; // Chỉ số trong mảng `data` (RGBA)
-          rTotal += data[pixelIndex]; // Tổng giá trị màu đỏ
-          gTotal += data[pixelIndex + 1]; // Tổng giá trị màu xanh lá
-          bTotal += data[pixelIndex + 2]; // Tổng giá trị màu xanh dương
-        }
-
-        // Tính giá trị trung bình cho từng kênh màu
-        const pixelCount = hairPixelIndices.length;
-        const avgR = Math.round(rTotal / pixelCount);
-        const avgG = Math.round(gTotal / pixelCount);
-        const avgB = Math.round(bTotal / pixelCount);
-
-        // Làm mượt kết quả qua nhiều khung hình
-        const smoothingFactor = 0.8; // Hệ số làm mượt (0.0 - 1.0)
-        const prevAvgColor = prevAvgColorRef.current || { r: 0, g: 0, b: 0 };
-        const smoothedR = Math.round(
-          smoothingFactor * prevAvgColor.r + (1 - smoothingFactor) * avgR
-        );
-        const smoothedG = Math.round(
-          smoothingFactor * prevAvgColor.g + (1 - smoothingFactor) * avgG
-        );
-        const smoothedB = Math.round(
-          smoothingFactor * prevAvgColor.b + (1 - smoothingFactor) * avgB
-        );
-        prevAvgColorRef.current = { r: smoothedR, g: smoothedG, b: smoothedB };
-
-        // Hiển thị kết quả màu tóc
-        const hairColorName = getNearestHairColorName(
-          smoothedR,
-          smoothedG,
-          smoothedB
-        );
-
-        setMakeupSuggestion(`Your hair color is: ${hairColorName}.`);
       }
     } catch (err) {
       console.error("[HairColor] Lỗi trong quá trình phân đoạn:", err);

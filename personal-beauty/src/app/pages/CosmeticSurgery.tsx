@@ -86,7 +86,6 @@ export default function CosmeticSurgery() {
         const averageDeviation = deviationCount > 0 ? totalDeviation / deviationCount : 0;
         const now = performance.now();
         const isStable = averageDeviation < STABILITY_THRESHOLD;
-        console.log(12321, isStable);
         if (isStable && !lastStableTime.current) {
             lastStableTime.current = now;
             setStatusMessage("Analyzing face...");

@@ -66,7 +66,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [VIEWS.PERSONAL_BODY_TYPE]: ["pose"],
     [VIEWS.HOME]: ["hand"],
     [VIEWS.HAIR_COLOR]: ["hand"],
-    [VIEWS.PERSONAL_MAKEUP]: ["hand"],
+    [VIEWS.PERSONAL_MAKEUP]: ["hand", "face"],
     [VIEWS.COSMETIC_SURGERY]: ["hand", "face"],
   };
 

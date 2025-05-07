@@ -1,10 +1,10 @@
 name: Sync Fork with Upstream
 
 on:
-  push:
-    branches:
-      - dual-mainpipe-main-4  # or the branch you want to track for changes
-  workflow_dispatch:  # This allows you to manually trigger the sync
+  # Periodically check for new changes in the upstream repository (every hour)
+  schedule:
+    - cron: "*/1 * * * *"  # This runs the action every hour, you can adjust this timing as needed
+  workflow_dispatch:  # Allows manual triggering via the Actions tab
 
 jobs:
   sync:
@@ -30,7 +30,7 @@ jobs:
         run: |
           git fetch upstream
 
-      # Merge upstream changes into your fork's main branch
+      # Merge upstream changes into your fork's branch
       - name: Merge upstream changes
         run: |
           git checkout dual-mainpipe-main-4  # Replace with your branch if necessary

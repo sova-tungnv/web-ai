@@ -27,7 +27,7 @@ const HairSelection: React.FC<HairSelectionProps> = ({
       ref={(el) => {
         buttonRefs.current[0] = el;
       }}
-      className="hover:bg-gray-300 active:bg-gray-200 text-[50px] cursor-pointer text-[#db2777] flex items-center min-h-[124px] justify-center gap-4 border-4 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300 ease-in-out"
+      className="hover:bg-gray-300 btn-slide-action active:bg-gray-200 text-[50px] cursor-pointer text-[#db2777] flex items-center min-h-[124px] justify-center gap-4 border-4 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300 ease-in-out"
     >↑</button>
     <div
       ref={scrollContainerRef}
@@ -64,7 +64,7 @@ const HairSelection: React.FC<HairSelectionProps> = ({
       ref={(el) => {
         buttonRefs.current[1] = el;
       }}
-      className="text-[50px] hover:bg-gray-300 active:bg-gray-200 cursor-pointer text-[#db2777] flex items-center min-h-[124px] justify-center gap-4 border-4 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300 ease-in-out"
+      className="text-[50px] hover:bg-gray-300 btn-slide-action active:bg-gray-200 cursor-pointer text-[#db2777] flex items-center min-h-[124px] justify-center gap-4 border-4 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300 ease-in-out"
     >↓</button>
   </div>
   );

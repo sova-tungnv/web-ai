@@ -96,7 +96,7 @@ const handleDetect = async () => {
     dropped?.imageBitmap?.close();
   }
   isDetecting = true;
-  console.log(`[VisionWorker] Start detect at ${timestamp}, modelTypes: ${modelTypes.join(", ")}`);
+  //console.log(`[VisionWorker] Start detect at ${timestamp}, modelTypes: ${modelTypes.join(", ")}`);
 
   try {
     const results: { [key: string]: any } = {};
@@ -104,21 +104,21 @@ const handleDetect = async () => {
 
     // Ưu tiên phát hiện tay
     if (modelTypes.includes("hand") && models.has("hand")) {
-      console.log("[VisionWorker] Detecting hand...");
+      //console.log("[VisionWorker] Detecting hand...");
       const handResult = await models.get("hand").detectForVideo(imageBitmap, timestamp);
       results.hand = handResult || { landmarks: [] };
 
       if (handResult?.landmarks?.length > 0) {
-        console.log(`[VisionWorker] Hand detected. Landmarks count: ${handResult.landmarks.length}`);
+        //console.log(`[VisionWorker] Hand detected. Landmarks count: ${handResult.landmarks.length}`);
         indexRaised = isIndexRaised(handResult.landmarks[0]);
         results.hand.isIndexRaised = indexRaised;
 
         if (indexRaised) {
           lastIndexRaisedTime = timestamp;
-          console.log("[VisionWorker] Index finger raised, prioritizing hand.");
+          //console.log("[VisionWorker] Index finger raised, prioritizing hand.");
         }
       } else {
-        console.log("[VisionWorker] No hand landmarks detected.");
+        //console.log("[VisionWorker] No hand landmarks detected.");
         results.hand.isIndexRaised = false;
       }
     } else {
@@ -129,16 +129,16 @@ const handleDetect = async () => {
     const now = timestamp;
     if (indexRaised || (now - lastIndexRaisedTime < INDEX_RAISED_TIMEOUT)) {
       if (indexRaised) {
-        console.log("[VisionWorker] Index raised detected, skipping other models.");
+        //console.log("[VisionWorker] Index raised detected, skipping other models.");
       } else {
-        console.log("[VisionWorker] Index raised timeout not reached, skipping other models.");
+        //console.log("[VisionWorker] Index raised timeout not reached, skipping other models.");
       }
     } else {
       // Xử lý các mô hình khác nếu không phát hiện index raised hoặc timeout đã hết
       const otherModels = modelTypes.filter((m: string) => m !== "hand");
       for (const modelType of otherModels) {
         if (models.has(modelType)) {
-          console.log(`[VisionWorker] Detecting ${modelType}...`);
+          //console.log(`[VisionWorker] Detecting ${modelType}...`);
           if (modelType === "hair") {
             const hairRaw = await models.get(modelType).segmentForVideo(imageBitmap, timestamp);
             if (hairRaw?.categoryMask) {
@@ -153,7 +153,7 @@ const handleDetect = async () => {
       }
     }
 
-    console.log("[VisionWorker] Posting detection result to main thread.", results);
+    //console.log("[VisionWorker] Posting detection result to main thread.", results);
     self.postMessage({ type: "detectionResult", results });
   } catch (err) {
     console.error("[VisionWorker] Detection error:", err);
@@ -167,7 +167,7 @@ const handleDetect = async () => {
 
 self.onmessage = async (e: MessageEvent) => {
   const { type, data } = e.data;
-  console.log(`[VisionWorker] Message received: ${type}`, data || "");
+  //console.log(`[VisionWorker] Message received: ${type}`, data || "");
 
   if (type === "initialize") {
     const { modelType } = data;
@@ -178,14 +178,14 @@ self.onmessage = async (e: MessageEvent) => {
 
     try {
       if (!filesetResolver) {
-        console.log("[VisionWorker] Loading FilesetResolver...");
+        //console.log("[VisionWorker] Loading FilesetResolver...");
         filesetResolver = await FilesetResolver.forVisionTasks("/wasm");
       }
 
       if (!models.has(modelType)) {
         const { class: ModelClass, options } = modelConfigs[modelType];
         models.set(modelType, await ModelClass.createFromOptions(filesetResolver, options));
-        console.log(`[VisionWorker] Model ${modelType} initialized successfully.`);
+        //console.log(`[VisionWorker] Model ${modelType} initialized successfully.`);
       }
 
       self.postMessage({ type: "initialized", success: true, modelType });
@@ -203,19 +203,19 @@ self.onmessage = async (e: MessageEvent) => {
       dropped?.imageBitmap?.close();
     }
     frameQueue.push({ imageBitmap, timestamp, modelTypes });
-    console.log(`[VisionWorker] Frame queued. Queue size: ${frameQueue.length}`);
+    //console.log(`[VisionWorker] Frame queued. Queue size: ${frameQueue.length}`);
     handleDetect();
   }
 
   if (type === "cleanup") {
     const { modelType } = data;
     if (modelType && models.has(modelType)) {
-      console.log(`[VisionWorker] Cleaning up model: ${modelType}`);
+      //console.log(`[VisionWorker] Cleaning up model: ${modelType}`);
       models.get(modelType).close();
       models.delete(modelType);
       self.postMessage({ type: "cleaned", success: true, modelType });
     } else if (!modelType) {
-      console.log("[VisionWorker] Cleaning up all models...");
+      //console.log("[VisionWorker] Cleaning up all models...");
       models.forEach((model) => model.close());
       models.clear();
       self.postMessage({ type: "cleaned", success: true });

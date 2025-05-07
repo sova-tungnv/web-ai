@@ -4,7 +4,7 @@
 "use client";
 
 import React, { RefObject, createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
-import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { useLoading } from "./LoadingContext";
 import { ViewType, VIEWS } from "../constants/views";
 
 interface HandData {
@@ -40,6 +40,7 @@ export const useWebcam = () => {
 };
 
 export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { setIsLoading } = useLoading();
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<string>(VIEWS.HOME);
@@ -145,6 +146,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         },
       });
       setStream(mediaStream);
+      setIsLoading(true);
 
       mediaStream.getVideoTracks().forEach((track) => {
         track.addEventListener("ended", async () => {
@@ -190,6 +192,10 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       videoRef.current.play().catch((err) => {
         console.error("[WebcamProvider] Error playing video:", err);
       });
+
+      videoRef.current.onloadeddata = () => {
+        setIsLoading(false);
+      };
     }
   }, [stream]);
 

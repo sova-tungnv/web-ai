@@ -15,7 +15,7 @@ export default function LoadingOverlay({ isLoading }: LoadingOverlayProps) {
     let timeout: NodeJS.Timeout;
     if (isLoading) {
       setVisible(true);
-      timeout = setTimeout(() => setVisible(false), 8000); // fallback auto-hide
+      timeout = setTimeout(() => setVisible(false), 15000); // fallback auto-hide
     } else {
       // Wait for fade-out before unmount
       timeout = setTimeout(() => setVisible(false), 300);

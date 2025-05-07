@@ -53,7 +53,6 @@ export default function CosmeticSurgery() {
       const newHistory = [...landmarkHistoryRef.current, landmarks].slice(
         -HISTORY_SIZE
       );
-
       if (!detectionResults.face?.faceLandmarks) {
         setNoFaceDetectedDuration((prev) => prev + 1000);
         if (noFaceDetectedDuration >= 30000) {

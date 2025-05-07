@@ -36,9 +36,14 @@ jobs:
           git checkout dual-mainpipe-main-4  # Replace with your branch if necessary
           git merge upstream/dual-mainpipe-main-4 --allow-unrelated-histories -m "Sync fork with upstream" || echo "No changes to merge"
 
+      # Rebase and resolve conflicts (if necessary)
+      - name: Rebase to resolve conflicts
+        run: |
+          git pull --rebase origin dual-mainpipe-main-4 || echo "No rebase required"
+
       # Push the changes back to your fork
       - name: Commit and push changes
         run: |
-          git push origin dual-mainpipe-main-4  # Replace with your branch name
+          git push --force-with-lease origin dual-mainpipe-main-4  # Replace with your branch name
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

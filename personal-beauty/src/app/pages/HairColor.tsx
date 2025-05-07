@@ -27,7 +27,7 @@ export default function HairColor() {
   const scrollContainerRef: any = useRef(null);
   const lastStableTime = useRef<number | null>(null);
   const lastUnstableTime = useRef<number | null>(null);
-  const STABILITY_THRESHOLD = 0.2;
+  const STABILITY_THRESHOLD = 0.01;
   const HISTORY_SIZE = 5;
   const STABILITY_DURATION = 1000;
   const MIN_STABLE_DURATION = 500;
@@ -341,7 +341,6 @@ export default function HairColor() {
     const averageDeviation = deviationCount > 0 ? (totalDeviation / (255 * deviationCount)) * 100 : 0;
     const now = performance.now();
     const isStable = averageDeviation < STABILITY_THRESHOLD;
-  
     if (isStable && !lastStableTime.current) {
       lastStableTime.current = now;
       setStatusMessage("Analyzing face...");

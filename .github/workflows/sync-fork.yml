@@ -1,9 +1,9 @@
 name: Sync Fork with Upstream
 
 on:
-  # Run every 5 minutes
+  # Run every 1 minute
   schedule:
-    - cron: "*/1 * * * *"  # Runs the action every 5 minutes
+    - cron: "*/1 * * * *"  # Runs the action every 1 minute
   workflow_dispatch:  # Allows manual triggering via the Actions tab
 
 jobs:
@@ -35,11 +35,11 @@ jobs:
         run: |
           git log HEAD..upstream/dual-mainpipe-main-4 --oneline || echo "No new changes from upstream"
 
-      # Merge upstream changes into your fork's branch
+      # Merge all changes from the upstream repository into your fork's branch
       - name: Merge upstream changes
         run: |
           git checkout dual-mainpipe-main-4  # Replace with your branch if necessary
-          git merge upstream/dual-mainpipe-main-4 --allow-unrelated-histories -m "Sync fork with upstream" || echo "No changes to merge"
+          git merge upstream/dual-mainpipe-main-4 --no-ff -m "Sync fork with upstream" || echo "No changes to merge"
 
       # Rebase and resolve conflicts (if necessary)
       - name: Rebase to resolve conflicts

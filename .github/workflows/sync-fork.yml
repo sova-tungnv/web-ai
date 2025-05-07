@@ -1,0 +1,44 @@
+name: Sync Fork with Upstream
+
+on:
+  push:
+    branches:
+      - dual-mainpipe-main-4  # or the branch you want to track for changes
+  workflow_dispatch:  # This allows you to manually trigger the sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout your fork's code
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # Set up Git
+      - name: Set up Git
+        run: |
+          git config --global user.name 'sova-tungnv'
+          git config --global user.email 'nvtung@marusysvina.com'
+
+      # Add upstream repository
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/Humax-Viet-Nam/web-ai.git  # Replace with the actual upstream repository
+
+      # Fetch changes from the upstream repository
+      - name: Fetch upstream changes
+        run: |
+          git fetch upstream
+
+      # Merge upstream changes into your fork's main branch
+      - name: Merge upstream changes
+        run: |
+          git checkout dual-mainpipe-main-4  # Replace with your branch if necessary
+          git merge upstream/dual-mainpipe-main-4 --allow-unrelated-histories -m "Sync fork with upstream" || echo "No changes to merge"
+
+      # Push the changes back to your fork
+      - name: Commit and push changes
+        run: |
+          git push origin dual-mainpipe-main-4  # Replace with your branch name
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

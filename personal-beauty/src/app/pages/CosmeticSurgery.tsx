@@ -13,134 +13,151 @@ import { useLoading } from "../context/LoadingContext";
 import { VIEWS } from "../constants/views";
 
 export default function CosmeticSurgery() {
-    const {
-        stream,
-        error: webcamError,
-        detectionResults,
-        setCurrentView,
-    } = useWebcam();
-    const { setIsLoading } = useLoading();
-    const [error, setError] = useState<string | null>(null);
-    const lastStableTime = useRef<number | null>(null);
-    const lastUnstableTime = useRef<number | null>(null);
-    const STABILITY_THRESHOLD = 15;
-    const HISTORY_SIZE = 5;
-    const STABILITY_DURATION = 1000;
-    const MIN_STABLE_DURATION = 500;
-    const [statusMessage, setStatusMessage] = useState<string>("Initializing camera...");
-    const [isFrameStable, setIsFrameStable] = useState(false);
-    const landmarkHistoryRef = useRef<{ x: number; y: number }[][]>([]);
-    const [noFaceDetectedDuration, setNoFaceDetectedDuration] = useState<number>(0);
-    const [progress, setProgress] = useState<number>(0);
-    const [isVideoReady, setIsVideoReady] = useState(false);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const animationFrameId = useRef<number | null>(null);
-    const lastDetectTime = useRef(0);
-    const [result, setResult] = useState<string | null>(null);
-    const [topPoint, setTopPoint] = useState<NormalizedLandmark | null>(null);
-  
-    useEffect(() => {
-        setCurrentView(VIEWS.COSMETIC_SURGERY)
+  const {
+    stream,
+    error: webcamError,
+    detectionResults,
+    setCurrentView,
+  } = useWebcam();
+  const { setIsLoading } = useLoading();
+  const [error, setError] = useState<string | null>(null);
+  const lastStableTime = useRef<number | null>(null);
+  const lastUnstableTime = useRef<number | null>(null);
+  const STABILITY_THRESHOLD = 15;
+  const HISTORY_SIZE = 5;
+  const STABILITY_DURATION = 1000;
+  const MIN_STABLE_DURATION = 500;
+  const [statusMessage, setStatusMessage] = useState<string>(
+    "Initializing camera..."
+  );
+  const [isFrameStable, setIsFrameStable] = useState(false);
+  const landmarkHistoryRef = useRef<{ x: number; y: number }[][]>([]);
+  const [noFaceDetectedDuration, setNoFaceDetectedDuration] =
+    useState<number>(0);
+  const [progress, setProgress] = useState<number>(0);
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const animationFrameId = useRef<number | null>(null);
+  const lastDetectTime = useRef(0);
+  const [result, setResult] = useState<string | null>(null);
+  const [topPoint, setTopPoint] = useState<NormalizedLandmark | null>(null);
+
+  useEffect(() => {
+    setCurrentView(VIEWS.COSMETIC_SURGERY);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+  }, []);
 
-    const checkFrameStability = useCallback((landmarks: { x: number; y: number }[]) => {
-        const newHistory = [...landmarkHistoryRef.current, landmarks].slice(-HISTORY_SIZE);
-    
-        if (!detectionResults.face?.faceLandmarks) {
-            setNoFaceDetectedDuration((prev) => prev + 1000);
-            if (noFaceDetectedDuration >= 30000) {
-                setStatusMessage("Face not detected for a long time. Please refresh the camera.");
-            } else {
-                setStatusMessage("Face not detected. Please adjust your position.");
-            }
-            setProgress(0);
-            setIsFrameStable(false);
-            landmarkHistoryRef.current = []; // reset
-            return;
+  const checkFrameStability = useCallback(
+    (landmarks: { x: number; y: number }[]) => {
+      const newHistory = [...landmarkHistoryRef.current, landmarks].slice(
+        -HISTORY_SIZE
+      );
+
+      if (!detectionResults.face?.faceLandmarks) {
+        setNoFaceDetectedDuration((prev) => prev + 1000);
+        if (noFaceDetectedDuration >= 30000) {
+          setStatusMessage(
+            "Face not detected for a long time. Please refresh the camera."
+          );
+        } else {
+          setStatusMessage("Face not detected. Please adjust your position.");
         }
-    
-        setNoFaceDetectedDuration(0);
-    
-        if (newHistory.length < HISTORY_SIZE) {
-            setStatusMessage("Collecting face data...");
-            setProgress(20);
-            landmarkHistoryRef.current = newHistory;
-            return;
-        }
-    
-        let totalDeviation = 0;
-        let deviationCount = 0;
-    
-        for (let i = 1; i < newHistory.length; i++) {
-            for (let j = 0; j < landmarks.length; j++) {
-                const dx = (newHistory[i][j].x - newHistory[i - 1][j].x) * 640;
-                const dy = (newHistory[i][j].y - newHistory[i - 1][j].y) * 480;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                totalDeviation += distance;
-                deviationCount++;
-            }
-        }
-    
-        const averageDeviation = deviationCount > 0 ? totalDeviation / deviationCount : 0;
-        const now = performance.now();
-        const isStable = averageDeviation < STABILITY_THRESHOLD;
-        if (isStable && !lastStableTime.current) {
-            lastStableTime.current = now;
-            setStatusMessage("Analyzing face...");
-            setProgress(60);
-        } else if (isStable && lastStableTime.current && now - lastStableTime.current >= STABILITY_DURATION) {
-            setIsFrameStable(true);
-            setStatusMessage("Analysis completed!");
-            setProgress(100);
-            lastUnstableTime.current = null;
-        } else if (!isStable) {
-            if (lastStableTime.current && now - lastStableTime.current < MIN_STABLE_DURATION) {
-                landmarkHistoryRef.current = newHistory;
-                return;
-            }
-            if (!lastUnstableTime.current) {
-                lastUnstableTime.current = now;
-            }
-            lastStableTime.current = null;
-            setIsFrameStable(false);
-            setStatusMessage("Please keep your face steady for analysis");
-            setProgress(20);
-        }
-    
+        setProgress(0);
+        setIsFrameStable(false);
+        landmarkHistoryRef.current = []; // reset
+        return;
+      }
+
+      setNoFaceDetectedDuration(0);
+
+      if (newHistory.length < HISTORY_SIZE) {
+        setStatusMessage("Collecting face data...");
+        setProgress(20);
         landmarkHistoryRef.current = newHistory;
-    }, [
-        HISTORY_SIZE,
-        STABILITY_THRESHOLD,
-        STABILITY_DURATION,
-        MIN_STABLE_DURATION,
-        detectionResults,
-        noFaceDetectedDuration,
-        setProgress,
-        setStatusMessage,
-    ]);
+        return;
+      }
 
-    // Kết nối video stream
-    useEffect(() => {
-        if (stream && videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.onloadedmetadata = () => {
-                videoRef.current!.play().catch((err) => {
-                    console.error("[PersonalColor] Error playing video:", err);
-                });
-                setIsVideoReady(true);
-                setIsLoading(false);
-                setStatusMessage("Please keep your face steady for analysis");
-                setProgress(20);
-            };
+      let totalDeviation = 0;
+      let deviationCount = 0;
+
+      for (let i = 1; i < newHistory.length; i++) {
+        for (let j = 0; j < landmarks.length; j++) {
+          const dx = (newHistory[i][j].x - newHistory[i - 1][j].x) * 640;
+          const dy = (newHistory[i][j].y - newHistory[i - 1][j].y) * 480;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          totalDeviation += distance;
+          deviationCount++;
         }
-    }, [stream, setIsLoading]);
+      }
+
+      const averageDeviation =
+        deviationCount > 0 ? totalDeviation / deviationCount : 0;
+      const now = performance.now();
+      const isStable = averageDeviation < STABILITY_THRESHOLD;
+      if (isStable && !lastStableTime.current) {
+        lastStableTime.current = now;
+        setStatusMessage("Analyzing face...");
+        setProgress(60);
+      } else if (
+        isStable &&
+        lastStableTime.current &&
+        now - lastStableTime.current >= STABILITY_DURATION
+      ) {
+        setIsFrameStable(true);
+        setStatusMessage("Analysis completed!");
+        setProgress(100);
+        lastUnstableTime.current = null;
+      } else if (!isStable) {
+        if (
+          lastStableTime.current &&
+          now - lastStableTime.current < MIN_STABLE_DURATION
+        ) {
+          landmarkHistoryRef.current = newHistory;
+          return;
+        }
+        if (!lastUnstableTime.current) {
+          lastUnstableTime.current = now;
+        }
+        lastStableTime.current = null;
+        setIsFrameStable(false);
+        setStatusMessage("Please keep your face steady for analysis");
+        setProgress(20);
+      }
+
+      landmarkHistoryRef.current = newHistory;
+    },
+    [
+      HISTORY_SIZE,
+      STABILITY_THRESHOLD,
+      STABILITY_DURATION,
+      MIN_STABLE_DURATION,
+      detectionResults,
+      noFaceDetectedDuration,
+      setProgress,
+      setStatusMessage,
+    ]
+  );
+
+  // Kết nối video stream
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current!.play().catch((err) => {
+          console.error("[PersonalColor] Error playing video:", err);
+        });
+        setIsVideoReady(true);
+        setIsLoading(false);
+        setStatusMessage("Please keep your face steady for analysis");
+        setProgress(20);
+      };
+    }
+  }, [stream, setIsLoading]);
 
   useEffect(() => {
     if (!stream || !canvasRef.current || !videoRef.current || !isVideoReady) {
-      console.log(
-          "[PersonalColor] Waiting for FaceLandmarker or webcam...");
+      console.log("[PersonalColor] Waiting for FaceLandmarker or webcam...");
       return;
     }
 
@@ -148,8 +165,8 @@ export default function CosmeticSurgery() {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-        setError("Failed to initialize canvas.");
-        return;
+      setError("Failed to initialize canvas.");
+      return;
     }
 
     const buildResult = (
@@ -158,7 +175,8 @@ export default function CosmeticSurgery() {
       foreheadWidth: number | null,
       jawWidth: number | null,
       eyebrowsToNoseDistance: number | null,
-      noseToChinDistance: number | null
+      noseToChinDistance: number | null,
+      angle: number | null
     ) => {
       if (
         !mouthWidth ||
@@ -166,28 +184,91 @@ export default function CosmeticSurgery() {
         !foreheadWidth ||
         !jawWidth ||
         !eyebrowsToNoseDistance ||
-        !noseToChinDistance
+        !noseToChinDistance ||
+        !angle
       ) {
         setResult(null);
 
         return;
       }
       let _result = "";
-      _result += `<p> - Ratio between your mouth and nose is: ${(
-        mouthWidth / noseWidth
-      ).toFixed(3)}</p>`;
-      _result += `<p> The suggestion ratio is 1.618</p>`;
+      const highlightColor = "orange";
+      const normalColor = "white";
+      const goodColor = "lime";
 
-      _result += `<p> - Ratio between your jaw and forehead is: ${(
-        jawWidth / foreheadWidth
-      ).toFixed(3)}</p>`;
-      _result += `<p> The suggestion ratio is 0.8</p>`;
+      const formatLine = (
+        label: string,
+        value: number,
+        standard: number,
+        threshold: number = 0.05,
+        unit: string = ""
+      ) => {
+        const color =
+          standard === 0
+            ? normalColor
+            : Math.abs(value - standard) > threshold
+            ? highlightColor
+            : goodColor;
+        return {
+          text: `<p style="color:${color}"> - ${label}: ${value.toFixed(
+            3
+          )} ${unit}</p>`,
+          color,
+        };
+      };
 
-      _result += `<p> - Ratio between the distance from eyebrows to nose and the distance from nose to chin is: ${(
-        noseToChinDistance / eyebrowsToNoseDistance
-      ).toFixed(3)}</p>`;
-      _result += `<p> The suggestion ratio is 1</p>`;
-      setResult(_result);
+      const lines = [
+        formatLine("Mouth Width", mouthWidth, 0),
+        formatLine("Nose Width", noseWidth, 0),
+        formatLine("Forehead Width", foreheadWidth, 0),
+        formatLine("Jaw Width", jawWidth, 0),
+        formatLine("Eyebrows to Nose Distance", eyebrowsToNoseDistance, 0),
+        formatLine("Nose to Chin Distance", noseToChinDistance, 0),
+        formatLine("Mouth/Nose ratio", mouthWidth / noseWidth, 1.618),
+        formatLine("Jaw/Forehead ratio", jawWidth / foreheadWidth, 0.8),
+        formatLine(
+          "Eyebrows-nose/Nose-chin ratio",
+          noseToChinDistance / eyebrowsToNoseDistance,
+          1
+        ),
+        formatLine("Angle", angle, 90, 5, "°"),
+      ];
+
+      _result = lines.map((line) => line.text).join("");
+
+      // Draw the result on the top right of the canvas
+      ctx.font = "10px Arial";
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(0, 0, 200, 160);
+
+      lines.forEach((line, index) => {
+        ctx.fillStyle = line.color;
+        ctx.fillText(line.text.replace(/<[^>]*>/g, ""), 10, 15 + index * 15);
+      });
+
+      let suggestions = "<p>Suggestions for a more balanced facial ratio:</p>";
+
+      if (mouthWidth / noseWidth < 1.618) {
+        suggestions += "<p>- Consider narrowing the width of your nose.</p>";
+      } else if (mouthWidth / noseWidth > 1.618) {
+        suggestions += "<p>- Consider reducing the width of your mouth.</p>";
+      }
+
+      if (jawWidth / foreheadWidth < 0.75) {
+        suggestions += "<p>- Consider enhancing the width of your jawline.</p>";
+      } else if (jawWidth / foreheadWidth > 0.85) {
+        suggestions += "<p>- Consider reducing the width of your jawline.</p>";
+      }
+
+      if (noseToChinDistance / eyebrowsToNoseDistance < 0.9) {
+        suggestions +=
+          "<p>- Consider increasing the length of your lower face.</p>";
+      } else if (noseToChinDistance / eyebrowsToNoseDistance > 1.1) {
+        suggestions +=
+          "<p>- Consider reducing the length of your lower face.</p>";
+      }
+
+      setResult(suggestions);
     };
 
     const calculateDistance = (
@@ -273,8 +354,8 @@ export default function CosmeticSurgery() {
       const point1ToPoint2Distance = calculateDistance(point1, point2);
       const point3ToPoint4Distance = calculateDistance(point3, point4);
       const ratio = point3ToPoint4Distance / point1ToPoint2Distance;
-      drawText("1", point1, point2);
-      drawText(ratio.toFixed(3), point3, point4);
+      // drawText("1", point1, point2);
+      // drawText(ratio.toFixed(3), point3, point4);
       return { ratio, point1ToPoint2Distance, point3ToPoint4Distance };
     };
 
@@ -388,7 +469,7 @@ export default function CosmeticSurgery() {
         landmarks[327],
         "purple"
       ); // Chiều dài giữa lông mày và mũi
-      drawText("1", ma1 as NormalizedLandmark, ma2 as NormalizedLandmark);
+      // drawText("1", ma1 as NormalizedLandmark, ma2 as NormalizedLandmark);
 
       const {
         distance: d2,
@@ -401,11 +482,11 @@ export default function CosmeticSurgery() {
         landmarks[377],
         "red"
       ); // Chiều dài giữa mũi và cằm
-      drawText(
-        (d2 / d1).toFixed(3),
-        mb1 as NormalizedLandmark,
-        { ...mb2, y: mb2.y - 0.1 } as NormalizedLandmark
-      );
+      // drawText(
+      //   (d2 / d1).toFixed(3),
+      //   mb1 as NormalizedLandmark,
+      //   { ...mb2, y: mb2.y - 0.1 } as NormalizedLandmark
+      // );
       drawDashedLineBetweenPoints(landmarks[152], landmarks[58]);
       drawDashedLineBetweenPoints(landmarks[152], landmarks[288]);
 
@@ -416,21 +497,29 @@ export default function CosmeticSurgery() {
         landmarks[288]
       );
 
-      drawText(
-        `${angle.toFixed(2)}°`,
-        landmarks[152],
-        { ...landmarks[152], y: landmarks[152].y + 0.05 } as NormalizedLandmark,
-        "green"
+      // drawText(
+      //   `${angle.toFixed(2)}°`,
+      //   landmarks[152],
+      //   { ...landmarks[152], y: landmarks[152].y + 0.05 } as NormalizedLandmark,
+      //   "green"
+      // );
+      buildResult(
+        _mouthWidth,
+        _noseWidth,
+        _foreHeadWidth,
+        _jewWidth,
+        d1,
+        d2,
+        angle
       );
-      buildResult(_mouthWidth, _noseWidth, _foreHeadWidth, _jewWidth, d1, d2);
     };
 
     const detect = async () => {
       try {
         const now = performance.now();
         if (now - lastDetectTime.current < 1000 / 60) {
-            animationFrameId.current = requestAnimationFrame(detect);
-            return;
+          animationFrameId.current = requestAnimationFrame(detect);
+          return;
         }
         lastDetectTime.current = now;
 
@@ -450,7 +539,10 @@ export default function CosmeticSurgery() {
           offsetX = (canvas.width - drawWidth) / 2;
         }
         ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
-        if (detectionResults?.face?.faceLandmarks && detectionResults?.face?.faceLandmarks.length > 0) {
+        if (
+          detectionResults?.face?.faceLandmarks &&
+          detectionResults?.face?.faceLandmarks.length > 0
+        ) {
           const landmarks = detectionResults?.face?.faceLandmarks[0];
           checkFrameStability(landmarks);
           // analyzeFace(landmarks);
@@ -475,13 +567,13 @@ export default function CosmeticSurgery() {
   }, [stream, isVideoReady, detectionResults]);
 
   useEffect(() => {
-      const interval = setInterval(() => {
-          if (!detectionResults || !detectionResults.face?.faceLandmarks) {
-              setNoFaceDetectedDuration((prev) => prev + 1000);
-          }
-      }, 1000);
+    const interval = setInterval(() => {
+      if (!detectionResults || !detectionResults.face?.faceLandmarks) {
+        setNoFaceDetectedDuration((prev) => prev + 1000);
+      }
+    }, 1000);
 
-      return () => clearInterval(interval);
+    return () => clearInterval(interval);
   }, [detectionResults]);
 
   return (

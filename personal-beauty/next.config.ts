@@ -3,7 +3,7 @@ import TerserPlugin from "terser-webpack-plugin";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  webpack(config, { isServer, dev }) {
+  webpack(config, { dev }) {
     config.module.rules.push({
       test: /\.worker\.ts$/,
       use: {
@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
       },
     });
 
-    if (!dev && isServer) {
+    if (!dev) {
       config.optimization.minimizer = config.optimization.minimizer || [];
       config.optimization.minimizer.push(
         new TerserPlugin({

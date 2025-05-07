@@ -164,6 +164,7 @@ export const WebcamProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
     } catch (err) {
+      setIsLoading(false);
       console.error("[WebcamProvider] Error accessing webcam:", err);
       setError("Failed to access webcam. Please check your camera permissions.");
     }

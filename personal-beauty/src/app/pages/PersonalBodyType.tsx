@@ -2,8 +2,6 @@
 /* eslint-disable react/display-name */
 // src/components/page/PersonalColor.tsx
 
-// -----
-
 "use client";
 
 import React from "react";

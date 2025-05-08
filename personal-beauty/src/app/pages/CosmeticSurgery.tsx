@@ -40,8 +40,16 @@ export default function CosmeticSurgery() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const animationFrameId = useRef<number | null>(null);
   const lastDetectTime = useRef(0);
-  const [result, setResult] = useState<string | null>(null);
-  const [topPoint, setTopPoint] = useState<NormalizedLandmark | null>(null);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    mouthWidth?: number;
+    noseWidth?: number;
+    foreheadWidth?: number;
+    jawWidth?: number;
+    eyebrowsToNoseDistance?: number;
+    noseToChinDistance?: number;
+    angle?: number;
+  }>({});
 
   useEffect(() => {
     setCurrentView(VIEWS.COSMETIC_SURGERY);
@@ -168,28 +176,29 @@ export default function CosmeticSurgery() {
       return;
     }
 
-    const buildResult = (
-      mouthWidth: number | null,
-      noseWidth: number | null,
-      foreheadWidth: number | null,
-      jawWidth: number | null,
-      eyebrowsToNoseDistance: number | null,
-      noseToChinDistance: number | null,
-      angle: number | null
-    ) => {
+    const buildResult = () => {
       if (
-        !mouthWidth ||
-        !noseWidth ||
-        !foreheadWidth ||
-        !jawWidth ||
-        !eyebrowsToNoseDistance ||
-        !noseToChinDistance ||
-        !angle
+        !result.mouthWidth ||
+        !result.noseWidth ||
+        !result.foreheadWidth ||
+        !result.jawWidth ||
+        !result.eyebrowsToNoseDistance ||
+        !result.noseToChinDistance ||
+        !result.angle
       ) {
-        setResult(null);
+        setSuggestion(null);
 
         return;
       }
+      const {
+        mouthWidth,
+        noseWidth,
+        foreheadWidth,
+        jawWidth,
+        eyebrowsToNoseDistance,
+        noseToChinDistance,
+        angle,
+      } = result;
       let _result = "";
       const highlightColor = "orange";
       const normalColor = "white";
@@ -267,7 +276,7 @@ export default function CosmeticSurgery() {
           "<p>- Consider reducing the length of your lower face.</p>";
       }
 
-      setResult(suggestions);
+      setSuggestion(suggestions);
     };
 
     const calculateDistance = (
@@ -287,7 +296,7 @@ export default function CosmeticSurgery() {
         x: 2 * landmarks[10].x - midpoint.x,
         y: 2 * landmarks[10].y - midpoint.y,
       };
-      setTopPoint(symmetryPoint as NormalizedLandmark);
+      // setTopPoint(symmetryPoint as NormalizedLandmark);
       const topFace = symmetryPoint;
       const bottomFace = landmarks[152];
       const leftFace = landmarks[234];
@@ -496,21 +505,27 @@ export default function CosmeticSurgery() {
         landmarks[288]
       );
 
-      // drawText(
-      //   `${angle.toFixed(2)}°`,
-      //   landmarks[152],
-      //   { ...landmarks[152], y: landmarks[152].y + 0.05 } as NormalizedLandmark,
-      //   "green"
-      // );
-      buildResult(
-        _mouthWidth,
-        _noseWidth,
-        _foreHeadWidth,
-        _jewWidth,
-        d1,
-        d2,
-        angle
-      );
+      if (
+        Math.abs((result.mouthWidth || 0) - _mouthWidth) > 0.1 ||
+        Math.abs((result.noseWidth || 0) - _noseWidth) > 0.1 ||
+        Math.abs((result.foreheadWidth || 0) - _foreHeadWidth) > 0.1 ||
+        Math.abs((result.jawWidth || 0) - _jewWidth) > 0.1 ||
+        Math.abs((result.eyebrowsToNoseDistance || 0) - d1) > 0.1 ||
+        Math.abs((result.noseToChinDistance || 0) - d2) > 0.1 ||
+        Math.abs((result.angle || 0) - angle) > 1
+      ) {
+        setResult({
+          mouthWidth: _mouthWidth,
+          noseWidth: _noseWidth,
+          foreheadWidth: _foreHeadWidth,
+          jawWidth: _jewWidth,
+          eyebrowsToNoseDistance: d1,
+          noseToChinDistance: d2,
+          angle: angle,
+        });
+      }
+
+      buildResult();
     };
 
     const detect = async () => {
@@ -581,7 +596,7 @@ export default function CosmeticSurgery() {
       description="Analyze facial features for cosmetic surgery recommendations."
       videoRef={videoRef}
       canvasRef={canvasRef}
-      result={result}
+      result={suggestion}
       error={error || webcamError}
       statusMessage={statusMessage}
       progress={progress}

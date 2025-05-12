@@ -1,13 +1,13 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/pages/PersonalColor.tsx
+// src/pages/PersonalMakeup.tsx - Component phân tích và áp dụng makeup tối ưu hóa
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import AnalysisLayout from "../components/AnalysisLayout";
 import { useWebcam } from "../context/WebcamContext";
-import { useLoading } from "../context/LoadingContext"; // Thêm import
+import { useLoading } from "../context/LoadingContext";
 import { VIEWS } from "../constants/views";
 
 type FacialFeatures = {
@@ -23,31 +23,157 @@ type FacialFeatures = {
     cheekboneHeight: number;
 };
 
-export default function PersonalColor() {
-    const { stream, error: webcamError, restartStream, detectionResults, setCurrentView } = useWebcam();
-    const { setIsLoading } = useLoading(); // Sử dụng context
+type FilterType = "natural" | "glamour" | "soft" | "dramatic" | "nude";
+
+export default function PersonalMakeup() {
+    const { 
+        stream, 
+        error: webcamError, 
+        restartStream, 
+        detectionResults, 
+        setCurrentView, 
+        handData,
+    } = useWebcam();
+    const { setIsLoading } = useLoading();
     const [error, setError] = useState<string | null>(null);
     const [isVideoReady, setIsVideoReady] = useState(false);
-    const lastStableTime = useRef<number | null>(null);
-    const lastUnstableTime = useRef<number | null>(null);
-    const STABILITY_THRESHOLD = 15;
-    const HISTORY_SIZE = 5;
-    const STABILITY_DURATION = 1000;
-    const MIN_STABLE_DURATION = 500;
     const [statusMessage, setStatusMessage] = useState<string>("Initializing camera...");
     const [isFrameStable, setIsFrameStable] = useState(false);
-    const landmarkHistoryRef = useRef<{ x: number; y: number }[][]>([]);
     const [noFaceDetectedDuration, setNoFaceDetectedDuration] = useState<number>(0);
     const [progress, setProgress] = useState<number>(0);
+    const [makeupSuggestion, setMakeupSuggestion] = useState<string | null>(null);
+    const [currentFilter, setCurrentFilter] = useState<FilterType>("natural");
+
+    // Refs
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const displayVideoRef = useRef<HTMLVideoElement>(null);
-    const animationFrameId = useRef<number | null>(null);
-    const [makeupSuggestion, setMakeupSuggestion] = useState<any | null>(null);
-    const lastDetectTime = useRef(0);
+    const animationRef = useRef<number | null>(null);
+    const lastRenderTime = useRef<number>(0);
+    const facialFeaturesRef = useRef<FacialFeatures | null>(null);
+    const landmarkHistoryRef = useRef<NormalizedLandmark[][]>([]);
+    const lastStableTime = useRef<number | null>(null);
+    const isProhibitedMovement = useRef<boolean>(false);
+    const lastFilterChange = useRef<number>(0);
+    const shouldForceRender = useRef<boolean>(false);
 
-    function analyzeFacialFeatures(
-        landmarks: NormalizedLandmark[]
-    ): FacialFeatures {
+    // Constants
+    const STABILITY_THRESHOLD = 12;
+    const STABILITY_DURATION = 800;
+    const RENDER_INTERVAL = 25; // ms between renders (controls frame rate)
+    const SKIP_FRAMES = 2; // Process only every Nth frame
+    const frameCounter = useRef<number>(0);
+    
+    // Color presets for filters
+    const filterColors = {
+        natural: {
+            lipColor: "rgba(223, 41, 41, 0.4)",
+            lipHighlight: "rgba(255, 255, 255, 0.2)",
+            cheekColor: "rgba(211, 34, 11, 0.3)",
+            eyebrowColor: "rgba(54, 24, 15, 0.6)",
+            eyelinerColor: "rgba(30, 30, 30, 0.8)",
+            highlightColor: "rgba(255, 255, 255, 0.2)",
+            contourColor: "rgba(80, 40, 40, 0.15)",
+            skinColor: "rgba(197, 175, 163, 0.15)",
+        },
+        glamour: {
+            lipColor: "rgba(190, 0, 50, 0.6)",
+            lipHighlight: "rgba(255, 180, 180, 0.4)",
+            cheekColor: "rgba(255, 20, 50, 0.35)",
+            eyebrowColor: "rgba(20, 10, 0, 0.75)",
+            eyelinerColor: "rgba(0, 0, 0, 0.95)",
+            highlightColor: "rgba(255, 245, 230, 0.3)",
+            contourColor: "rgba(60, 30, 30, 0.25)",
+            skinColor: "rgba(255, 222, 200, 0.2)",
+        },
+        soft: {
+            lipColor: "rgba(255, 150, 150, 0.4)",
+            lipHighlight: "rgba(255, 255, 255, 0.25)",
+            cheekColor: "rgba(255, 180, 180, 0.3)",
+            eyebrowColor: "rgba(120, 90, 70, 0.5)",
+            eyelinerColor: "rgba(90, 60, 60, 0.7)",
+            highlightColor: "rgba(255, 255, 255, 0.25)",
+            contourColor: "rgba(150, 120, 110, 0.1)",
+            skinColor: "rgba(250, 240, 230, 0.2)",
+        },
+        dramatic: {
+            lipColor: "rgba(150, 0, 40, 0.7)",
+            lipHighlight: "rgba(255, 100, 100, 0.5)",
+            cheekColor: "rgba(180, 40, 40, 0.4)",
+            eyebrowColor: "rgba(10, 5, 0, 0.85)",
+            eyelinerColor: "rgba(0, 0, 0, 1)",
+            highlightColor: "rgba(255, 245, 220, 0.35)",
+            contourColor: "rgba(40, 20, 20, 0.35)",
+            skinColor: "rgba(240, 210, 190, 0.25)",
+        },
+        nude: {
+            lipColor: "rgba(200, 150, 130, 0.5)",
+            lipHighlight: "rgba(255, 240, 230, 0.3)",
+            cheekColor: "rgba(210, 170, 140, 0.3)",
+            eyebrowColor: "rgba(100, 80, 60, 0.6)",
+            eyelinerColor: "rgba(80, 60, 50, 0.7)",
+            highlightColor: "rgba(255, 250, 240, 0.25)",
+            contourColor: "rgba(150, 120, 100, 0.2)",
+            skinColor: "rgba(230, 220, 210, 0.2)",
+        }
+    };
+
+    // Filter descriptions
+    const filterDescriptions = {
+        natural: "Tự nhiên, nhẹ nhàng tôn lên vẻ đẹp vốn có",
+        glamour: "Quyến rũ, nổi bật với son đỏ và eyeliner đậm",
+        soft: "Mềm mại, nhẹ nhàng với tông hồng phấn",
+        dramatic: "Mạnh mẽ, ấn tượng với tông màu sâu", 
+        nude: "Tự nhiên với tông màu nude, phù hợp hàng ngày"
+    };
+
+    // Component mount setup
+    useEffect(() => {
+        setCurrentView(VIEWS.COSMETIC_SURGERY);
+        
+        // Cleanup on unmount
+        return () => {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+                animationRef.current = null;
+            }
+        };
+    }, []);
+    
+    // Setup video stream
+    useEffect(() => {
+        if (!stream || !displayVideoRef.current) return;
+        
+        displayVideoRef.current.srcObject = stream;
+        displayVideoRef.current.onloadedmetadata = () => {
+            const video = displayVideoRef.current;
+            if (!video) return;
+            
+            video.play().catch((err: any) => {
+                console.error("[PersonalMakeup] Error playing video:", err);
+                setError("Cannot initialize video: " + err.message);
+            });
+            
+            // Set canvas size to match video
+            if (canvasRef.current) {
+                canvasRef.current.width = video.videoWidth;
+                canvasRef.current.height = video.videoHeight;
+                
+                // Add GPU acceleration hints to canvas
+                if (canvasRef.current.style) {
+                    canvasRef.current.style.willChange = 'transform';
+                    canvasRef.current.style.transform = 'translateZ(0)';
+                }
+            }
+            
+            setIsVideoReady(true);
+            setIsLoading(false);
+            setStatusMessage("Please keep your face steady for analysis");
+            setProgress(20);
+        };
+    }, [stream, setIsLoading]);
+
+    // Function to analyze facial features for makeup suggestions
+    const analyzeFacialFeatures = useCallback((landmarks: NormalizedLandmark[]): FacialFeatures => {
         const euclidean = (a: any, b: any) =>
             Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
 
@@ -75,7 +201,7 @@ export default function PersonalColor() {
         const lipWidth = euclidean(landmarks[61], landmarks[291]);
         const browLength = euclidean(browLeft, browRight);
         const cheekboneProminence = euclidean(cheekLeft, cheekRight);
-        const foreheadHeight = euclidean(forehead, browCenter); // chiều cao trán
+        const foreheadHeight = euclidean(forehead, browCenter);
         const cheekboneHeight =
             euclidean(cheekLeft, leftEye) / euclidean(chin, cheekLeft);
 
@@ -99,12 +225,21 @@ export default function PersonalColor() {
             cheekboneHeight,
             foreheadHeight,
         };
-    }
+    }, []);
 
-    function generateMakeupSuggestion(features: FacialFeatures): string {
+    // Function to generate makeup suggestions based on facial analysis
+    const generateMakeupSuggestion = useCallback((features: FacialFeatures): string => {
         const suggestions: string[] = [];
 
-        // Nhận xét hình dáng khuôn mặt
+        // Add current filter description
+        suggestions.push(
+            `<div style="margin-bottom: 10px; padding: 10px; background: rgba(255,182,193,0.2); border-radius: 8px;">
+                <strong style="font-size: 1em; color: #d64161;">💄 Filter hiện tại: ${currentFilter.charAt(0).toUpperCase() + currentFilter.slice(1)}</strong>
+                <p style="margin: 5px 0 0; font-size: 0.9em;">${filterDescriptions[currentFilter]}</p>
+            </div>`
+        );
+
+        // Face shape recommendation
         switch (features.faceShape) {
             case "round":
                 suggestions.push(
@@ -133,7 +268,7 @@ export default function PersonalColor() {
                 break;
         }
 
-        // Khoảng cách mắt
+        // Eye distance recommendation
         if (features.eyeDistance > 0.15) {
             suggestions.push(
                 `<strong style="font-size: 0.88em;">👁️ Đôi mắt bạn khá to và cách xa nhau</strong> <br/>💄<em style="font-size: 17px;"> Nên kẻ eyeliner đậm và chuốt mascara kỹ phần khóe mắt trong để thu hẹp khoảng cách</em>`
@@ -144,7 +279,7 @@ export default function PersonalColor() {
             );
         }
 
-        // Môi
+        // Lip recommendation
         if (features.lipWidth > 0.15) {
             suggestions.push(
                 `<strong style="font-size: 0.88em;">👄 Bạn có đôi môi đầy đặn </strong><br/> 💄<em style="font-size: 17px;"> Hãy dùng son lì hoặc màu trầm để tạo cảm giác hài hòa hơn.</em>`
@@ -155,7 +290,7 @@ export default function PersonalColor() {
             );
         }
 
-        // Mũi
+        // Nose recommendation
         if (features.noseWidth > 0.07) {
             suggestions.push(
                 `<strong style="font-size: 0.88em;">👃 Mũi của bạn hơi rộng </strong><br/> 💄<em style="font-size: 17px;"> Tạo khối nhẹ hai bên sống mũi để tạo hiệu ứng thon gọn.</em>`
@@ -166,7 +301,7 @@ export default function PersonalColor() {
             );
         }
 
-        // Lông mày
+        // Eyebrow recommendation
         if (features.browLength < features.eyeDistance * 1.5) {
             suggestions.push(
                 `<strong style="font-size: 0.88em;">👁️‍🗨️ Lông mày bạn ngắn và nhẹ </strong><br/> 💄<em style="font-size: 17px;"> Nên kẻ dài thêm một chút và tạo độ cong nhẹ để gương mặt hài hòa hơn.</em>`
@@ -177,7 +312,7 @@ export default function PersonalColor() {
             );
         }
 
-        // Gò má
+        // Cheekbone recommendation
         if (features.cheekboneHeight < 0.4) {
             suggestions.push(
                 `<strong style="font-size: 0.88em;">😊 Gò má bạn cao </strong><br/> 💄<em style="font-size: 17px;"> Hãy đánh má hồng thấp hơn xương gò má và tán ngang để làm dịu đường nét.</em>`
@@ -188,7 +323,7 @@ export default function PersonalColor() {
             );
         }
 
-        // Đường chân tóc
+        // Forehead recommendation
         if (features.foreheadHeight > 0.15) {
             suggestions.push(
                 `<strong style="font-size: 0.88em;">🔍 Trán bạn cao </strong><br/> 💄<em style="font-size: 17px;"> Dùng phấn tối màu sát chân tóc để tạo cảm giác trán thấp hơn và mềm mại hơn.</em>`
@@ -199,394 +334,430 @@ export default function PersonalColor() {
             );
         }
 
+        // Filter selection UI
+        suggestions.push(`
+            <div style="margin-top: 15px; padding: 10px; background: rgba(255,182,193,0.1); border-radius: 8px;">
+                <strong style="font-size: 0.9em;">🎨 Thử các phong cách makeup khác:</strong>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px;">
+                    <button data-filter="natural" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'natural' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'natural' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Tự nhiên</button>
+                    <button data-filter="glamour" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'glamour' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'glamour' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Quyến rũ</button>
+                    <button data-filter="soft" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'soft' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'soft' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Mềm mại</button>
+                    <button data-filter="dramatic" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'dramatic' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'dramatic' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Ấn tượng</button>
+                    <button data-filter="nude" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'nude' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'nude' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Nude</button>
+                </div>
+            </div>
+        `);
+
         return suggestions.join("<br/>");
-    }
+    }, [currentFilter]);
 
+    // Handle filter buttons click
     useEffect(() => {
-        setCurrentView(VIEWS.COSMETIC_SURGERY)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        const handleFilterClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'BUTTON' && target.dataset.filter) {
+                const filterName = target.dataset.filter as FilterType;
+                
+                // Skip if same filter or recently changed
+                if (filterName === currentFilter) return;
+                if (performance.now() - lastFilterChange.current < 300) return;
+                
+                lastFilterChange.current = performance.now();
+                setCurrentFilter(filterName);
+                shouldForceRender.current = true;
+                
+                // Update suggestion if we have facial features
+                if (facialFeaturesRef.current) {
+                    const suggestion = generateMakeupSuggestion(facialFeaturesRef.current);
+                    setMakeupSuggestion(suggestion);
+                }
+            }
+        };
+        
+        document.addEventListener('click', handleFilterClick);
+        return () => document.removeEventListener('click', handleFilterClick);
+    }, [currentFilter, generateMakeupSuggestion]);
 
-    // Kết nối video stream
+    // Handle keyboard shortcuts for filter selection
     useEffect(() => {
-        if (stream && displayVideoRef.current) {
-            displayVideoRef.current.srcObject = stream;
-            displayVideoRef.current.onloadedmetadata = () => {
-                displayVideoRef.current!.play().catch((err: any) => {
-                    console.error("[PersonalColor] Error playing video:", err);
-                });
-                setIsVideoReady(true);
-                setIsLoading(false);
-                setStatusMessage("Please keep your face steady for analysis");
-                setProgress(20);
-            };
-        }
-    }, [stream, setIsLoading]);
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (performance.now() - lastFilterChange.current < 300) return;
+            
+            let newFilter: FilterType | null = null;
+            
+            switch(e.key) {
+                case '1': newFilter = 'natural'; break;
+                case '2': newFilter = 'glamour'; break;
+                case '3': newFilter = 'soft'; break;
+                case '4': newFilter = 'dramatic'; break;
+                case '5': newFilter = 'nude'; break;
+            }
+            
+            if (newFilter && newFilter !== currentFilter) {
+                lastFilterChange.current = performance.now();
+                setCurrentFilter(newFilter);
+                shouldForceRender.current = true;
+                
+                if (facialFeaturesRef.current) {
+                    const suggestion = generateMakeupSuggestion(facialFeaturesRef.current);
+                    setMakeupSuggestion(suggestion);
+                }
+            }
+        };
+        
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [currentFilter, generateMakeupSuggestion]);
 
-    const checkFrameStability = useCallback((landmarks: { x: number; y: number }[]) => {
-        const newHistory = [...landmarkHistoryRef.current, landmarks].slice(-HISTORY_SIZE);
-    
-        if (!detectionResults.face?.faceLandmarks) {
-            setNoFaceDetectedDuration((prev) => prev + 1000);
-            if (noFaceDetectedDuration >= 30000) {
-                setStatusMessage("Face not detected for a long time. Please refresh the camera.");
-            } else {
-                setStatusMessage("Face not detected. Please adjust your position.");
+    // Monitor face stability
+    const checkFaceStability = useCallback((landmarks: NormalizedLandmark[]) => {
+        if (!landmarks || landmarks.length < 468) return false;
+        
+        // Store key points for stability check
+        const keyPoints = [33, 263, 61, 291, 152]; // eyes, mouth, nose
+        const keyLandmarks = keyPoints.map(idx => ({
+            x: landmarks[idx].x,
+            y: landmarks[idx].y
+        }));
+        
+        // Update landmark history
+        landmarkHistoryRef.current.push(landmarks);
+        if (landmarkHistoryRef.current.length > 5) {
+            landmarkHistoryRef.current.shift();
+        }
+        
+        // Not enough history yet
+        if (landmarkHistoryRef.current.length < 3) {
+            return false;
+        }
+        
+        // Check stability between frames
+        let totalMovement = 0;
+        
+        for (let i = 1; i < landmarkHistoryRef.current.length; i++) {
+            const prevFrame = landmarkHistoryRef.current[i-1];
+            const currFrame = landmarkHistoryRef.current[i];
+            
+            for (const pointIdx of keyPoints) {
+                const prev = prevFrame[pointIdx];
+                const curr = currFrame[pointIdx];
+                const dx = (curr.x - prev.x) * 1000; // Scale for better precision
+                const dy = (curr.y - prev.y) * 1000;
+                totalMovement += Math.sqrt(dx*dx + dy*dy);
             }
-            setProgress(0);
-            setIsFrameStable(false);
-            landmarkHistoryRef.current = []; // reset
-            return;
         }
-    
-        setNoFaceDetectedDuration(0);
-    
-        if (newHistory.length < HISTORY_SIZE) {
-            setStatusMessage("Collecting face data...");
-            setProgress(20);
-            landmarkHistoryRef.current = newHistory;
-            return;
-        }
-    
-        let totalDeviation = 0;
-        let deviationCount = 0;
-    
-        for (let i = 1; i < newHistory.length; i++) {
-            for (let j = 0; j < landmarks.length; j++) {
-                const dx = (newHistory[i][j].x - newHistory[i - 1][j].x) * 640;
-                const dy = (newHistory[i][j].y - newHistory[i - 1][j].y) * 480;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                totalDeviation += distance;
-                deviationCount++;
-            }
-        }
-    
-        const averageDeviation = deviationCount > 0 ? totalDeviation / deviationCount : 0;
+        
+        const avgMovement = totalMovement / ((landmarkHistoryRef.current.length-1) * keyPoints.length);
+        const isStable = avgMovement < STABILITY_THRESHOLD;
+        
+        // Update stability state
         const now = performance.now();
-        const isStable = averageDeviation < STABILITY_THRESHOLD;
-        if (isStable && !lastStableTime.current) {
-            lastStableTime.current = now;
-            setStatusMessage("Analyzing face...");
-            setProgress(60);
-        } else if (isStable && lastStableTime.current && now - lastStableTime.current >= STABILITY_DURATION) {
-            setIsFrameStable(true);
-            setStatusMessage("Analysis completed!");
-            setProgress(100);
-            lastUnstableTime.current = null;
-        } else if (!isStable) {
-            if (lastStableTime.current && now - lastStableTime.current < MIN_STABLE_DURATION) {
-                landmarkHistoryRef.current = newHistory;
-                return;
-            }
-            if (!lastUnstableTime.current) {
-                lastUnstableTime.current = now;
-            }
-            lastStableTime.current = null;
-            setIsFrameStable(false);
-            setStatusMessage("Please keep your face steady for analysis");
-            setProgress(20);
-        }
-    
-        landmarkHistoryRef.current = newHistory;
-    }, [
-        HISTORY_SIZE,
-        STABILITY_THRESHOLD,
-        STABILITY_DURATION,
-        MIN_STABLE_DURATION,
-        detectionResults,
-        noFaceDetectedDuration,
-        setProgress,
-        setStatusMessage,
-    ]);
-
-    useEffect(() => {
-        if (!stream || !canvasRef.current || !displayVideoRef.current || !isVideoReady) {
-            return;
-        }
-        const video = displayVideoRef.current;
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        if (!ctx) {
-            setError("Failed to initialize canvas.");
-            return;
-        }
-
-        const detect = async () => {
-            try {
-                const now = performance.now();
-                if (now - lastDetectTime.current < 1000 / 60) {
-                    animationFrameId.current = requestAnimationFrame(detect);
-                    return;
-                }
-                lastDetectTime.current = now;
-                if (detectionResults?.face?.faceLandmarks && detectionResults?.face?.faceLandmarks.length > 0) {
-                    const landmarks = detectionResults?.face?.faceLandmarks[0];
-                    checkFrameStability(landmarks);
+        
+        if (isStable) {
+            if (!lastStableTime.current) {
+                lastStableTime.current = now;
+                setStatusMessage("Analyzing face...");
+                setProgress(60);
+            } else if (now - lastStableTime.current > STABILITY_DURATION && !isFrameStable) {
+                // Face has been stable for enough time
+                setIsFrameStable(true);
+                setStatusMessage("Analysis completed!");
+                setProgress(100);
+                
+                // Analyze facial features after stability confirmed
+                if (!facialFeaturesRef.current && landmarks) {
                     const features = analyzeFacialFeatures(landmarks);
-                    const suggestion = generateMakeupSuggestion(features);
-
-                    // Làm sạch canvas trước khi vẽ
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                    if (isFrameStable) {
-                        drawMakeup(
-                            ctx,
-                            landmarks,
-                            video.videoWidth,
-                            video.videoHeight
-                        );
-                    }
-
-                    setMakeupSuggestion(`${suggestion}`);
-                } else {
-                    setMakeupSuggestion(null);
+                    facialFeaturesRef.current = features;
+                    const suggestions = generateMakeupSuggestion(features);
+                    setMakeupSuggestion(suggestions);
                 }
-            } catch (err) {
-                console.error(
-                    "[PersonalMakeup] Error during face mesh detection:",
-                    err
-                );
+                
+                isProhibitedMovement.current = false;
             }
-
-            animationFrameId.current = requestAnimationFrame(detect);
-        };
-
-        detect();
-
-        return () => {
-            if (animationFrameId.current) {
-                cancelAnimationFrame(animationFrameId.current);
+        } else {
+            // Reset stability if face moved significantly
+            if (lastStableTime.current && avgMovement > STABILITY_THRESHOLD * 1.5) {
+                lastStableTime.current = null;
+                if (isFrameStable) {
+                    setIsFrameStable(false);
+                    setStatusMessage("Please keep your face steady");
+                    setProgress(20);
+                }
             }
-        };
-    }, [stream, restartStream, detectionResults]);
+        }
+        
+        return isStable;
+    }, [STABILITY_THRESHOLD, STABILITY_DURATION, isFrameStable, analyzeFacialFeatures, generateMakeupSuggestion]);
 
-    function drawMakeup(
-        ctx: CanvasRenderingContext2D,
-        landmarks: NormalizedLandmark[],
-        width: number,
-        height: number
-    ) {
+    // Face not detected handling
+    useEffect(() => {
+        if (!detectionResults?.face?.faceLandmarks) {
+            const timeout = setTimeout(() => {
+                setNoFaceDetectedDuration(prev => prev + 500);
+                
+                if (noFaceDetectedDuration > 1500) {
+                    setStatusMessage("Face not detected. Please adjust your position.");
+                    setProgress(0);
+                }
+            }, 500);
+            
+            return () => clearTimeout(timeout);
+        } else if (noFaceDetectedDuration > 0) {
+            setNoFaceDetectedDuration(0);
+        }
+    }, [detectionResults, noFaceDetectedDuration]);
+
+    // Function to draw makeup on face
+    const drawMakeup = useCallback((ctx: CanvasRenderingContext2D, landmarks: NormalizedLandmark[], width: number, height: number) => {
+        if (!landmarks || landmarks.length < 468) return;
+        
+        // Get current filter colors
+        const colors = filterColors[currentFilter];
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
+        
+        // =========================
+        // Draw lips
+        // =========================
         const outerLip = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291];
         const innerLip = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308];
-
-        ctx.save();
-        ctx.filter = "blur(5px)";
-
-        // --- Màu nền môi ---
-        ctx.beginPath();
-        ctx.fillStyle = "rgba(223, 41, 41, 0.4)"; // hồng cánh sen mềm
-        outerLip.forEach((index, i) => {
-            const pt = landmarks[index];
-            const x = pt.x * width;
-            const y = pt.y * height;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
-        ctx.closePath();
-        ctx.fill();
-
-        // --- Gradient hiệu ứng bóng (trong lòng môi) ---
-        const gradient = ctx.createRadialGradient(
-            landmarks[13].x * width, // center môi
-            landmarks[13].y * height,
-            1,
-            landmarks[13].x * width,
-            landmarks[13].y * height,
-            width * 0.05
-        );
-        gradient.addColorStop(0, "rgba(255, 255, 255, 0.2)");
-        gradient.addColorStop(1, "rgba(230, 71, 145, 0)");
-
-        ctx.beginPath();
-        ctx.fillStyle = gradient;
-        outerLip.forEach((index, i) => {
-            const pt = landmarks[index];
-            const x = pt.x * width;
-            const y = pt.y * height;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
-        ctx.closePath();
-        ctx.fill();
-
-        // --- Khoét phần môi trong để tạo độ dày ---
-        ctx.globalCompositeOperation = "destination-out";
-        ctx.beginPath();
-        innerLip.forEach((index, i) => {
-            const pt = landmarks[index];
-            const x = pt.x * width;
-            const y = pt.y * height;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.globalCompositeOperation = "source-over";
-        ctx.restore();
-
-        // Điểm gần trung tâm gò má
-        const leftCheekPoint = landmarks[50];
-        const rightCheekPoint = landmarks[280];
-
-        // Tọa độ thực
-        const leftX = leftCheekPoint.x * width;
-        const leftY = leftCheekPoint.y * height;
-        const rightX = rightCheekPoint.x * width;
-        const rightY = rightCheekPoint.y * height;
-
-        ctx.save();
-        ctx.filter = "blur(7px)";
-        ctx.fillStyle = "rgba(211, 34, 11, 0.3)"; // Hồng nhạt
-
-        const radius = Math.min(width, height) * 0.018; // Độ lớn má hồng
-
-        // Má trái
-        ctx.beginPath();
-        ctx.arc(leftX, leftY, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Má phải
-        ctx.beginPath();
-        ctx.arc(rightX, rightY, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.restore();
-
-        //============ Vẽ lông mày
-        const leftEyebrow = [70, 63, 105, 66, 107];
-        const rightEyebrow = [336, 296, 334, 293, 300];
-
+    
         ctx.save();
         ctx.filter = "blur(3px)";
-        ctx.fillStyle = "rgba(54, 24, 15, 0.64)"; // màu nâu đậm tự nhiên
-        // Lông mày trái
+    
+        // Outer lip
         ctx.beginPath();
-        leftEyebrow.forEach((index, i) => {
-            const pt = landmarks[index];
+        ctx.fillStyle = colors.lipColor;
+        for (let i = 0; i < outerLip.length; i++) {
+            const pt = landmarks[outerLip[i]];
             const x = pt.x * width;
             const y = pt.y * height;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
-        });
+        }
         ctx.closePath();
         ctx.fill();
-        // Lông mày phải
+    
+        // Lip highlight
+        const lipCenter = landmarks[13];
+        const highlightGradient = ctx.createRadialGradient(
+            lipCenter.x * width,
+            lipCenter.y * height,
+            1,
+            lipCenter.x * width,
+            lipCenter.y * height,
+            width * 0.04
+        );
+        highlightGradient.addColorStop(0, colors.lipHighlight);
+        highlightGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+    
         ctx.beginPath();
-        rightEyebrow.forEach((index, i) => {
-            const pt = landmarks[index];
+        ctx.fillStyle = highlightGradient;
+        for (let i = 0; i < outerLip.length; i++) {
+            const pt = landmarks[outerLip[i]];
             const x = pt.x * width;
             const y = pt.y * height;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
-        });
+        }
+        ctx.closePath();
+        ctx.fill();
+    
+        // Inner lip cutout
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.beginPath();
+        for (let i = 0; i < innerLip.length; i++) {
+            const pt = landmarks[innerLip[i]];
+            const x = pt.x * width;
+            const y = pt.y * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.restore();
+    
+        // =========================
+        // Draw blush
+        // =========================
+        const leftCheekPoint = landmarks[50];
+        const rightCheekPoint = landmarks[280];
+        const blushRadius = Math.min(width, height) * 0.02;
+    
+        ctx.save();
+        ctx.filter = "blur(7px)";
+        ctx.fillStyle = colors.cheekColor;
+    
+        // Left cheek
+        ctx.beginPath();
+        ctx.arc(leftCheekPoint.x * width, leftCheekPoint.y * height, blushRadius, 0, Math.PI * 2);
+        ctx.fill();
+    
+        // Right cheek
+        ctx.beginPath();
+        ctx.arc(rightCheekPoint.x * width, rightCheekPoint.y * height, blushRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    
+        // =========================
+        // Draw eyebrows
+        // =========================
+        const leftEyebrow = [70, 63, 105, 66, 107];
+        const rightEyebrow = [336, 296, 334, 293, 300];
+    
+        ctx.save();
+        ctx.filter = "blur(2px)";
+        ctx.fillStyle = colors.eyebrowColor;
+        
+        // Left eyebrow
+        ctx.beginPath();
+        for (let i = 0; i < leftEyebrow.length; i++) {
+            const pt = landmarks[leftEyebrow[i]];
+            const x = pt.x * width;
+            const y = pt.y * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        // Right eyebrow
+        ctx.beginPath();
+        for (let i = 0; i < rightEyebrow.length; i++) {
+            const pt = landmarks[rightEyebrow[i]];
+            const x = pt.x * width;
+            const y = pt.y * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
         ctx.closePath();
         ctx.fill();
         ctx.restore();
-
-        // =============Sống mũi và vùng highlight
-        const noseBridge = [6, 197, 195, 5, 4]; // giữa mũi đến đầu mũi
-        const noseContourLeft = [98, 327, 326]; // viền trái sống mũi
-        const noseContourRight = [327, 326, 98].map((i) => 454 - i); // phản chiếu viền phải (thủ công nếu cần)
-        // Highlight sống mũi
+        
+        // =========================
+        // Draw eyeliner
+        // =========================
+        const leftEyeliner = [33, 7, 163, 144, 145, 153, 154, 155];
+        const rightEyeliner = [263, 249, 390, 373, 374, 380, 381, 382];
+    
         ctx.save();
-        ctx.filter = "blur(5px)";
+        ctx.strokeStyle = colors.eyelinerColor;
+        ctx.lineWidth = 1;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+
+        // Left eyeliner
         ctx.beginPath();
-        ctx.fillStyle = "rgba(255, 255, 255, 0.2)"; // highlight trắng nhẹ
-        noseBridge.forEach((index, i) => {
-            const pt = landmarks[index];
+        for (let i = 0; i < leftEyeliner.length; i++) {
+            const pt = landmarks[leftEyeliner[i]];
             const x = pt.x * width;
             const y = pt.y * height;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
-        });
+        }
+        ctx.stroke();
+
+        // Right eyeliner
+        ctx.beginPath();
+        for (let i = 0; i < rightEyeliner.length; i++) {
+            const pt = landmarks[rightEyeliner[i]];
+            const x = pt.x * width;
+            const y = pt.y * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
         ctx.stroke();
         ctx.restore();
-        // Shadow 2 bên cánh mũi (contour)
-        const drawSideShadow = (points: number[]) => {
+    
+        // =========================
+        // Face highlight (simplified for performance)
+        // =========================
+        // Simpler highlight for better performance
+        if (currentFilter === 'glamour' || currentFilter === 'dramatic') {
             ctx.save();
-            ctx.filter = "blur(4px)";
+            ctx.filter = "blur(8px)";
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+            ctx.lineWidth = 3;
+            
+            // Nose highlight
             ctx.beginPath();
-            ctx.fillStyle = "rgba(80, 40, 40, 0.15)"; // shadow nâu nhẹ
-            points.forEach((index, i) => {
-                const pt = landmarks[index];
-                const x = pt.x * width;
-                const y = pt.y * height;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            });
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-        };
-
-        drawSideShadow(noseContourLeft);
-        drawSideShadow(noseContourRight);
-
-        // ==============Vẽ eyeliner
-        const leftEyeliner = [33, 7, 163, 144, 145, 153, 154, 155]; // mí dưới trái
-        const rightEyeliner = [263, 249, 390, 373, 374, 380, 381, 382]; // mí dưới phải
-
-        const drawEyeliner = (indices: number[], color: string) => {
-            ctx.save();
-            ctx.beginPath();
-            ctx.strokeStyle = color;
-            // ctx.filter = "blur(1px)";
-            ctx.lineWidth = 1;
-            ctx.lineJoin = "round";
-            ctx.lineCap = "round";
-
-            indices.forEach((index, i) => {
-                const pt = landmarks[index];
-                const x = pt.x * width;
-                const y = pt.y * height;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            });
-
+            const noseTop = landmarks[6];
+            const noseTip = landmarks[4];
+            ctx.moveTo(noseTop.x * width, noseTop.y * height);
+            ctx.lineTo(noseTip.x * width, noseTip.y * height);
             ctx.stroke();
+            
             ctx.restore();
-        };
+        }
+    }, [currentFilter]);
 
-        // Eyeliner – đen mảnh
-        drawEyeliner(leftEyeliner, "rgba(30, 30, 30, 0.9)");
-        drawEyeliner(rightEyeliner, "rgba(30, 30, 30, 0.9)");
-
-
-        // Da trắng sáng
-        const faceOutline = [
-            10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365,
-            379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93,
-            234, 127, 162, 21, 54,
-        ];
-
-        ctx.save();
-        ctx.beginPath();
-        faceOutline.forEach((index, i) => {
-            const pt = landmarks[index];
-            const x = pt.x * width;
-            const y = pt.y * height;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
-        ctx.closePath();
-
-        // Tô màu trắng nhẹ + blur
-        ctx.filter = "blur(6px)";
-        ctx.fillStyle = "rgba(197, 175, 163, 0.15)";
-        ctx.fill();
-        ctx.restore();
-    }
-
+    // Main rendering loop
     useEffect(() => {
-        const interval = setInterval(() => {
-            if (!detectionResults || !detectionResults.face?.faceLandmarks) {
-                setNoFaceDetectedDuration((prev) => prev + 1000);
+        if (!canvasRef.current || !displayVideoRef.current || !isVideoReady) return;
+        
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return;
+        
+        // Make sure canvas size matches video
+        if (displayVideoRef.current.videoWidth && displayVideoRef.current.videoHeight) {
+            if (canvas.width !== displayVideoRef.current.videoWidth) {
+                canvas.width = displayVideoRef.current.videoWidth;
             }
-        }, 1000);
-
-        return () => clearInterval(interval);
-    }, [detectionResults]);
+            if (canvas.height !== displayVideoRef.current.videoHeight) {
+                canvas.height = displayVideoRef.current.videoHeight;
+            }
+        }
+        
+        const renderLoop = () => {
+            const now = performance.now();
+            
+            // Rate limiting - only process every N milliseconds and frames
+            frameCounter.current = (frameCounter.current + 1) % SKIP_FRAMES;
+            if (frameCounter.current !== 0 && now - lastRenderTime.current < RENDER_INTERVAL && !shouldForceRender.current) {
+                animationRef.current = requestAnimationFrame(renderLoop);
+                return;
+            }
+            
+            lastRenderTime.current = now;
+            shouldForceRender.current = false;
+            
+            // Get face landmarks
+            const faceLandmarks = detectionResults?.face?.faceLandmarks?.[0];
+            
+            if (faceLandmarks && faceLandmarks.length > 0) {
+                // Check stability
+                checkFaceStability(faceLandmarks);
+                
+                // Draw makeup
+                drawMakeup(ctx, faceLandmarks, canvas.width, canvas.height);
+            } else if (noFaceDetectedDuration > 2000) {
+                // No face detected for a while, clear canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            animationRef.current = requestAnimationFrame(renderLoop);
+        };
+        
+        animationRef.current = requestAnimationFrame(renderLoop);
+        
+        return () => {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+                animationRef.current = null;
+            }
+        };
+    }, [
+        isVideoReady, 
+        detectionResults, 
+        drawMakeup, 
+        checkFaceStability, 
+        RENDER_INTERVAL,
+        SKIP_FRAMES,
+        noFaceDetectedDuration
+    ]);
 
     return (
         <AnalysisLayout

@@ -199,7 +199,7 @@ const AnalysisLayout = memo(
                   {result.toLowerCase() === "warm" && <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 2a8 8 0 0 0-8 8c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm0 2a6 6 0 0 1 6 6c0 1.66-.68 3.15-1.76 4.24l-1.41-1.41C15.55 14.1 16 13.1 16 12a4 4 0 0 0-4-4c-1.1 0-2.1.45-2.83 1.17l-1.41-1.41C8.85 6.68 10.34 6 12 6z"/></svg>}
                   {result.toLowerCase() === "cool" && <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 2a8 8 0 0 0-8 8c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm-2 6l2-2 2 2 2-2 2 2-2 2 2 2-2 2-2-2-2 2-2-2 2-2z"/></svg>}
                   {result.toLowerCase() === "neutral" && <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2zm0 2a8 8 0 0 0-8 8c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8zm-4 4h8v2H8zm0 4h8v2H8z"/></svg>}
-                  <span>Your result is</span>
+                  {/* <span>Your result is</span> */}
                   <span className="font-bold text-pink-600 ml-1">
                     <div dangerouslySetInnerHTML={{ __html: result }}></div>
                   </span>

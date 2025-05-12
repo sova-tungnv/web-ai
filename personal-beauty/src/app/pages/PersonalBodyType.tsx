@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
@@ -28,7 +29,8 @@ export default function PersonalBody() {
     const [bodySuggestion, setBodySuggestion] = useState<any | null>(null);
     const [distanceWaist, setDistanceWaist] = useState<any | null>(null);
     const [distanceHips, setDistanceHips] = useState<any | null>(null);
-
+    const [guideMsg, setGuideMsg] = useState<string>('');
+    const MSG_CHECK = "put your hands"
     useEffect(() => {
         setCurrentView(VIEWS.PERSONAL_BODY_TYPE);
     }, []);
@@ -109,16 +111,6 @@ export default function PersonalBody() {
                               Math.abs(distance(leftWrist, rightWrist))
                           );
 
-                    console.log(
-                        distanceWaist
-                            ? "✅ Cả hai tay giữ nguyên trong 3 giây do eo"
-                            : "chưa đo eo"
-                    );
-                    console.log(
-                        distanceHips
-                            ? "✅ Cả hai tay giữ nguyên trong 3 giây do hông"
-                            : "chưa đo hong"
-                    );
                     setStatusMessage(
                         distanceHips
                             ? "Get distence hips success"
@@ -186,6 +178,24 @@ export default function PersonalBody() {
         }
         return suggestions.join(`<br/>`);
     }
+
+    const actionButtons = useMemo(
+        () => (
+            <>
+                <button
+                    className={`bg-pink-500 text-white px-12 py-6 rounded-lg text-3xl hover:bg-pink-600 transition relative`}
+                    onClick={() => {
+                        setDistanceHips(null);
+                        setDistanceWaist(null);
+                        setBodySuggestion(null);
+                    }}
+                >
+                    Refresh
+                </button>
+            </>
+        ),
+        []
+    );
 
     useEffect(() => {
         if (
@@ -265,11 +275,13 @@ export default function PersonalBody() {
                 detectDistanceWaistAndHips(landmarks);
                 detectDistanceWaistAndHips(landmarks);
                 if (distanceWaist && distanceHips) {
-                    setBodySuggestion(analyzeBodyShape(landmarks));
+                    if (!bodySuggestion) {
+                        setBodySuggestion(analyzeBodyShape(landmarks));
+                    }
                     setProgress(100);
                     setStatusMessage("Analysis youw body success");
-                    setDistanceHips(null);
-                    setDistanceWaist(null);
+                    // setDistanceHips(null);
+                    // setDistanceWaist(null);
                 }
             }
 
@@ -285,6 +297,20 @@ export default function PersonalBody() {
         };
     }, [stream, isVideoReady, detectionResults]);
 
+    useEffect(() => {
+        if (statusMessage && statusMessage.toLowerCase().includes(MSG_CHECK)) {
+            if (distanceWaist && !distanceHips) {
+                setGuideMsg("Hold both hands steady for 3 seconds at the hips");
+            } else if (distanceWaist && distanceHips) {
+                setGuideMsg("");
+            } else {
+                setGuideMsg("Hold both hands steady for 3 seconds at the waist");
+            }
+        } else {
+            setGuideMsg("");
+        }
+    }, [statusMessage, distanceWaist, distanceHips]);
+
     return (
         <AnalysisLayout
             title="Personal body"
@@ -295,6 +321,8 @@ export default function PersonalBody() {
             error={error || webcamError}
             detectionResults={detectionResults}
             statusMessage={statusMessage}
+            actionButtons={distanceWaist && distanceHips ? actionButtons : undefined}
+            guideMessage={guideMsg}
             progress={progress}
         />
     );

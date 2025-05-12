@@ -33,7 +33,7 @@ export default function HandControlledApp({ children, onMenuSelect }: HandContro
   }, [currentView, onMenuSelect]);
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-r from-pink-100 to-purple-100 overflow-hidden">
+    <div className="flex min-h-screen bg-gradient-to-r from-pink-100 to-purple-100 overflow-hidden max-h-[100vh]">
       {webcamError && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white p-4 rounded-lg shadow-lg">
           {webcamError}

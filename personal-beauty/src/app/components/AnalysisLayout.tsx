@@ -200,7 +200,7 @@ const AnalysisLayout = memo(
             </h2>
             
             {result ? (
-              <div className={`text-base md:text-lg text-gray-700 mb-3 animate-fadeIn p-3 rounded-lg ${
+              <div className={`text-base md:text-lg text-gray-700 mb-3 animate-fadeIn p-3 rounded-lg max-h-[100%] overflow-auto ${
                 result.toLowerCase() === "warm" ? "bg-orange-100" : 
                 result.toLowerCase() === "cool" ? "bg-blue-100" : 
                 "bg-gray-100"

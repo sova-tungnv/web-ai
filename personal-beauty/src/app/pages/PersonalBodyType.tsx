@@ -29,8 +29,8 @@ export default function PersonalBody() {
     const [bodySuggestion, setBodySuggestion] = useState<any | null>(null);
     const [distanceWaist, setDistanceWaist] = useState<any | null>(null);
     const [distanceHips, setDistanceHips] = useState<any | null>(null);
-    const [guideMsg, setGuideMsg] = useState<string>('');
-    const MSG_CHECK = "put your hands"
+    const [guideMsg, setGuideMsg] = useState<string>("");
+    const MSG_CHECK = "put your hands";
     useEffect(() => {
         setCurrentView(VIEWS.PERSONAL_BODY_TYPE);
     }, []);
@@ -44,7 +44,7 @@ export default function PersonalBody() {
                 });
                 setIsVideoReady(true);
                 setIsLoading(false);
-                setStatusMessage("Please keep your body steady for analysis");
+                setStatusMessage("Please keep your body steady for analysis!");
                 setProgress(20);
             };
         }
@@ -101,8 +101,6 @@ export default function PersonalBody() {
                     !areBothHandsHeld
                 ) {
                     setAreBothHandsHeld(true);
-
-                    // TODO: thực hiện hành động tại đây
                     distanceWaist
                         ? setDistanceHips(
                               Math.abs(distance(leftWrist, rightWrist))
@@ -130,7 +128,8 @@ export default function PersonalBody() {
     }
 
     function analyzeBodyShape(landmarks: Landmark[]): string {
-        if (landmarks.length < 33) return "Không đủ dữ liệu";
+        if (landmarks.length < 33)
+            return "⚠️ Not enough data to analyze, please stand in the center of the frame.";
 
         const leftShoulder = landmarks[11];
         const rightShoulder = landmarks[12];
@@ -144,37 +143,40 @@ export default function PersonalBody() {
             Math.abs(shoulderWidth - distanceHips) < 0.05 &&
             Math.abs(distanceWaist - shoulderWidth) > 0.1
         ) {
+            // chiều rộng vai (shoulderWidth) gần bằng chiều rộng hông (distanceHips) và chiều rộng eo (distanceWaist) khác biệt rõ rệt so với chiều rộng va
             suggestions.push(
-                "Bạn có kiểu cơ thể đồng hồ cát, nên chọn váy ôm sát hoặc có thắt eo để tôn dáng và làm nổi bật vòng eo quyến rũ."
+                "⏳ You have an hourglass body shape, so you should choose body-hugging dresses or those with a cinched waist to accentuate your figure and highlight your alluring waistline."
             );
         } else if (Math.abs(shoulderWidth - distanceHips) < 0.02) {
+            // chiều rộng vai và hông gần như bằng nhau
             suggestions.push(
-                "Bạn có kiểu cơ thể hình chữ nhật, hãy chọn trang phục có điểm nhấn ở eo như váy peplum hoặc áo có chiết eo để tạo đường cong mềm mại."
+                "📏 You have a rectangular body shape, so opt for outfits with accents at the waist, such as peplum dresses or tops with a cinched waist, to create soft, feminine curves."
             );
         } else if (ratio > 1.1) {
+            // vai sẽ rộng hơn hông
             suggestions.push(
-                "Bạn có kiểu cơ thể tam giác ngược, nên chọn chân váy xòe hoặc quần ống rộng để cân đối với phần vai rộng."
-            );
-        } else if (ratio < 0.9) {
-            suggestions.push(
-                "Bạn có kiểu cơ thể tam giác xuôi, hãy chọn áo sáng màu hoặc áo có chi tiết nổi bật để thu hút sự chú ý lên phần thân trên."
+                "🔻 You have an inverted triangle body shape, so you should choose flared skirts or wide-leg pants to balance out your broad shoulders."
             );
         } else if (
             distanceHips > shoulderWidth + 0.05 &&
             Math.abs(distanceWaist - distanceHips) < 0.05
         ) {
+            // chiều rộng hông lớn hơn chiều rộng vai một chút (với một độ lệch hợp lý) và phần eo gần bằng hông
             suggestions.push(
-                "Bạn có kiểu cơ thể quả lê, nên chọn trang phục làm nổi bật phần vai như áo cổ rộng, tay phồng để cân đối với phần hông."
+                "🍐 You have a pear-shaped body, so opt for outfits that highlight your shoulders, such as wide necklines or puff-sleeved tops, to balance your lower body."
             );
         } else if (
             distanceWaist > shoulderWidth + 0.05 &&
             distanceWaist > distanceHips + 0.05
         ) {
+            // phần eo rộng hơn nhiều so với vai và hông
             suggestions.push(
-                "Bạn có kiểu cơ thể quả táo, nên chọn trang phục suông nhẹ, tránh nhấn vào vòng eo và ưu tiên kiểu dáng tạo cảm giác thon gọn."
+                "🍎 You have an apple-shaped body, so go for lightly flowing outfits that avoid emphasizing the waist and prioritize designs that create a slimmer appearance."
             );
         } else {
-            suggestions.push("Khó xác định dáng cụ thể");
+            suggestions.push(
+                "It is difficult to determine your exact body shape."
+            );
         }
         return suggestions.join(`<br/>`);
     }
@@ -279,9 +281,7 @@ export default function PersonalBody() {
                         setBodySuggestion(analyzeBodyShape(landmarks));
                     }
                     setProgress(100);
-                    setStatusMessage("Analysis youw body success");
-                    // setDistanceHips(null);
-                    // setDistanceWaist(null);
+                    setStatusMessage("Analysis your body success");
                 }
             }
 
@@ -304,7 +304,9 @@ export default function PersonalBody() {
             } else if (distanceWaist && distanceHips) {
                 setGuideMsg("");
             } else {
-                setGuideMsg("Hold both hands steady for 3 seconds at the waist");
+                setGuideMsg(
+                    "Hold both hands steady for 3 seconds at the waist"
+                );
             }
         } else {
             setGuideMsg("");
@@ -321,7 +323,9 @@ export default function PersonalBody() {
             error={error || webcamError}
             detectionResults={detectionResults}
             statusMessage={statusMessage}
-            actionButtons={distanceWaist && distanceHips ? actionButtons : undefined}
+            actionButtons={
+                distanceWaist && distanceHips ? actionButtons : undefined
+            }
             guideMessage={guideMsg}
             progress={progress}
         />

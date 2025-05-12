@@ -18,6 +18,7 @@ interface AnalysisLayoutProps {
   colorPalette?: JSX.Element;
   actionButtons?: JSX.Element;
   statusMessage?: string; // Status message từ component cha (nếu có)
+  guideMessage?: string;  // suport personal body type screen
   progress?: number; // Progress từ component cha (nếu có)
 }
 
@@ -34,6 +35,7 @@ const AnalysisLayout = memo(
     colorPalette,
     actionButtons,
     statusMessage: propStatusMessage = "Initializing...",
+    guideMessage,
     progress: propProgress = 0,
   }: AnalysisLayoutProps) => {
     const [showError, setShowError] = useState(false);
@@ -151,6 +153,14 @@ const AnalysisLayout = memo(
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m0 14v1m-6-6h1m10 0h-1M5.757 5.757l.707.707m11.072 11.072l-.707.707M5.757 18.243l.707-.707m11.072-11.072l-.707-.707M12 12h.01" />
                   </svg>
                   <p className="text-white text-xl font-semibold">{statusMessage}</p>
+                </div>
+              )}
+              {statusMessage.toLowerCase().includes("put your hands on") && guideMessage && (
+                <div className="absolute inset-0 bg-black/[.15] z-[20] flex flex-col items-center flex-start">
+                  <svg className="w-12 h-12 text-white my-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M12 2a10 10 0 110 20 10 10 0 010-20z" />
+                  </svg>
+                  <p className="text-white text-xl font-semibold">{guideMessage}</p>
                 </div>
               )}
               {!result && statusMessage.toLowerCase().includes("face not detected") && (
@@ -280,6 +290,7 @@ const AnalysisLayout = memo(
       prevProps.error === nextProps.error &&
       prevProps.detectionResults === nextProps.detectionResults &&
       prevProps.statusMessage === nextProps.statusMessage &&
+      prevProps.guideMessage === nextProps.guideMessage &&
       prevProps.selectionButtons === nextProps.selectionButtons &&
       prevProps.progress === nextProps.progress
     );

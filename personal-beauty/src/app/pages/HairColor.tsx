@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/pages/PersonalColor.tsx
+// src/pages/HairColor.tsx
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";

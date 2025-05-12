@@ -3,11 +3,12 @@
 // src/pages/PersonalMakeup.tsx - Component phân tích và áp dụng makeup tối ưu hóa
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import AnalysisLayout from "../components/AnalysisLayout";
 import { useWebcam } from "../context/WebcamContext";
 import { useLoading } from "../context/LoadingContext";
+import { useHandControl } from "../context/HandControlContext";
 import { VIEWS } from "../constants/views";
 
 type FacialFeatures = {
@@ -24,6 +25,73 @@ type FacialFeatures = {
 };
 
 type FilterType = "natural" | "glamour" | "soft" | "dramatic" | "nude";
+
+// Create Selection Button component similar to PersonalColor
+const FilterSelectionButton = React.memo(
+    ({ 
+        filter, 
+        selectedFilter, 
+        setSelectedFilter 
+    }: { 
+        filter: FilterType; 
+        selectedFilter: FilterType; 
+        setSelectedFilter: (filter: FilterType) => void 
+    }) => {
+        const { registerElement, unregisterElement, isHandDetectionEnabled } = useHandControl();
+        const buttonRef = useRef<HTMLButtonElement>(null);
+        const isRegistered = useRef(false);
+
+        useEffect(() => {
+            const button = buttonRef.current;
+            if (!button) return;
+
+            if (isHandDetectionEnabled && !isRegistered.current) {
+                button.classList.add("hoverable");
+                registerElement(button);
+                isRegistered.current = true;
+            } else if (!isHandDetectionEnabled && isRegistered.current) {
+                button.classList.remove("hoverable");
+                unregisterElement(button);
+                isRegistered.current = false;
+            }
+
+            return () => {
+                if (isRegistered.current && button) {
+                    button.classList.remove("hoverable");
+                    unregisterElement(button);
+                    isRegistered.current = false;
+                }
+            };
+        }, [registerElement, unregisterElement, isHandDetectionEnabled]);
+
+        // Get display name for filter
+        const displayName = (() => {
+            switch (filter) {
+                case "natural": return "Natural";
+                case "glamour": return "Glamour";
+                case "soft": return "Soft";
+                case "dramatic": return "Dramatic";
+                case "nude": return "Nude";
+                default: return filter;
+            }
+        })();
+
+        return (
+            <button
+                ref={buttonRef}
+                className={`filter-button text-2xl min-h-[123px] font-semibold px-8 py-4 rounded-xl transition-all duration-300 transform shadow-lg ${
+                    selectedFilter === filter
+                        ? "bg-pink-600 text-white scale-105 border-4 border-pink-300"
+                        : "bg-gray-200 text-gray-800 hover:bg-gray-300 hover:scale-105"
+                }`}
+                data-filter={filter}
+                onClick={() => setSelectedFilter(filter)}
+            >
+                {displayName}
+            </button>
+        );
+    }
+);
 
 export default function PersonalMakeup() {
     const { 
@@ -43,6 +111,7 @@ export default function PersonalMakeup() {
     const [progress, setProgress] = useState<number>(0);
     const [makeupSuggestion, setMakeupSuggestion] = useState<string | null>(null);
     const [currentFilter, setCurrentFilter] = useState<FilterType>("natural");
+    const [shouldApplyMakeup, setShouldApplyMakeup] = useState(false);
 
     // Refs
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -117,13 +186,13 @@ export default function PersonalMakeup() {
         }
     };
 
-    // Filter descriptions
+    // Filter descriptions - now in English
     const filterDescriptions = {
-        natural: "Tự nhiên, nhẹ nhàng tôn lên vẻ đẹp vốn có",
-        glamour: "Quyến rũ, nổi bật với son đỏ và eyeliner đậm",
-        soft: "Mềm mại, nhẹ nhàng với tông hồng phấn",
-        dramatic: "Mạnh mẽ, ấn tượng với tông màu sâu", 
-        nude: "Tự nhiên với tông màu nude, phù hợp hàng ngày"
+        natural: "Enhances your natural beauty with subtle enhancements",
+        glamour: "Bold and striking with red lips and defined eyeliner",
+        soft: "Gentle and feminine with soft pink tones",
+        dramatic: "Powerful and impressive with deep color tones",
+        nude: "Natural nude tones perfect for everyday wear"
     };
 
     // Component mount setup
@@ -171,6 +240,28 @@ export default function PersonalMakeup() {
             setProgress(20);
         };
     }, [stream, setIsLoading]);
+
+    // Create filter buttons UI similar to PersonalColor
+    const filterButtons = useMemo(() => {
+        const filters: FilterType[] = ["natural", "glamour", "soft", "dramatic", "nude"];
+        
+        return (
+            <div className="md:w-2/12 p-1 rounded-xl flex flex-col max-h-[calc(100vh-64px)] overflow-hidden">
+                <div className="flex flex-col flex-wrap gap-3 w-full h-full">
+                    <div className="flex flex-col gap-6">
+                        {filters.map((filter) => (
+                            <FilterSelectionButton 
+                                key={filter} 
+                                filter={filter} 
+                                selectedFilter={currentFilter} 
+                                setSelectedFilter={setCurrentFilter} 
+                            />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }, [currentFilter]);
 
     // Function to analyze facial features for makeup suggestions
     const analyzeFacialFeatures = useCallback((landmarks: NormalizedLandmark[]): FacialFeatures => {
@@ -227,14 +318,14 @@ export default function PersonalMakeup() {
         };
     }, []);
 
-    // Function to generate makeup suggestions based on facial analysis
+    // Function to generate makeup suggestions based on facial analysis - now in English with updated icons
     const generateMakeupSuggestion = useCallback((features: FacialFeatures): string => {
         const suggestions: string[] = [];
 
         // Add current filter description
         suggestions.push(
             `<div style="margin-bottom: 10px; padding: 10px; background: rgba(255,182,193,0.2); border-radius: 8px;">
-                <strong style="font-size: 1em; color: #d64161;">💄 Filter hiện tại: ${currentFilter.charAt(0).toUpperCase() + currentFilter.slice(1)}</strong>
+                <strong style="font-size: 1em; color: #d64161;">💄 Current Filter: ${currentFilter.charAt(0).toUpperCase() + currentFilter.slice(1)}</strong>
                 <p style="margin: 5px 0 0; font-size: 0.9em;">${filterDescriptions[currentFilter]}</p>
             </div>`
         );
@@ -243,27 +334,27 @@ export default function PersonalMakeup() {
         switch (features.faceShape) {
             case "round":
                 suggestions.push(
-                    `<strong style="font-size: 0.88em;">📐 Khuôn mặt của bạn tròn với đường nét mềm mại</strong> <br/><em style="font-size: 17px;">💄 Nên tạo khối nhẹ ở hai bên má và xương hàm để tạo cảm giác thon gọn</em>`
+                    `<strong style="font-size: 0.88em;">🔄 You have a round face with soft features</strong> <br/><em style="font-size: 15px;">💄 Create subtle contours on your cheeks and jawline for a slimming effect</em>`
                 );
                 break;
             case "oval":
                 suggestions.push(
-                    `<strong style="font-size: 0.88em;">📐 Khuôn mặt của bạn hình oval, tỉ lệ rất cân đối</strong> <br/>💄<em style="font-size: 17px;"> Chỉ cần nhấn nhẹ vào các đường nét để tôn lên vẻ đẹp tự nhiên </em>`
+                    `<strong style="font-size: 0.88em;">🔄 You have an oval face with well-balanced proportions</strong> <br/>💄<em style="font-size: 15px;"> Lightly enhance your natural features to maintain your balanced look</em>`
                 );
                 break;
             case "square":
                 suggestions.push(
-                    `<strong style="font-size: 0.88em;">📐 Khuôn mặt của bạn vuông với đường hàm rõ nét</strong> <br/>💄<em style="font-size: 17px;"> Hãy dùng highlight ở trán và cằm để làm mềm đường nét khuôn mặt</em>`
+                    `<strong style="font-size: 0.88em;">🔄 You have a square face with a defined jawline</strong> <br/>💄<em style="font-size: 15px;"> Use highlighter on your forehead and chin to soften facial angles</em>`
                 );
                 break;
             case "heart":
                 suggestions.push(
-                    `<strong style="font-size: 0.88em;">📐 Khuôn mặt bạn hình trái tim, trán rộng, cằm nhỏ</strong> <br/>💄<em style="font-size: 17px;"> Nên tập trung highlight vùng trán và tạo khối nhẹ cho phần cằm</em>`
+                    `<strong style="font-size: 0.88em;">🔄 You have a heart-shaped face with a wider forehead and narrower chin</strong> <br/>💄<em style="font-size: 15px;"> Focus highlight on the forehead and apply light contour to the chin</em>`
                 );
                 break;
             case "long":
                 suggestions.push(
-                    `<strong style="font-size: 0.88em;">📐 Khuôn mặt bạn khá dài, thanh thoát</strong> <br/>💄<em style="font-size: 17px;"> Dùng má hồng tán ngang để giúp khuôn mặt trông cân đối hơn</em>`
+                    `<strong style="font-size: 0.88em;">🔄 You have a longer face with elegant features</strong> <br/>💄<em style="font-size: 15px;"> Apply blush horizontally to create a more balanced facial appearance</em>`
                 );
                 break;
         }
@@ -271,145 +362,73 @@ export default function PersonalMakeup() {
         // Eye distance recommendation
         if (features.eyeDistance > 0.15) {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">👁️ Đôi mắt bạn khá to và cách xa nhau</strong> <br/>💄<em style="font-size: 17px;"> Nên kẻ eyeliner đậm và chuốt mascara kỹ phần khóe mắt trong để thu hẹp khoảng cách</em>`
+                `<strong style="font-size: 0.88em;">👁️ Your eyes are large and set wider apart</strong> <br/>💄<em style="font-size: 15px;"> Use darker eyeliner and focus mascara on the inner corners to visually reduce the distance</em>`
             );
         } else {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">👁️ Đôi mắt bạn nhỏ hoặc gần nhau</strong> <br/>💄<em style="font-size: 17px;">Ưu tiên eyeliner mảnh và phấn mắt sáng để mở rộng đôi mắt</em>`
+                `<strong style="font-size: 0.88em;">👁️ Your eyes are smaller or closer together</strong> <br/>💄<em style="font-size: 15px;">Prioritize thin eyeliner and lighter eyeshadow to make your eyes appear larger</em>`
             );
         }
 
         // Lip recommendation
         if (features.lipWidth > 0.15) {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">👄 Bạn có đôi môi đầy đặn </strong><br/> 💄<em style="font-size: 17px;"> Hãy dùng son lì hoặc màu trầm để tạo cảm giác hài hòa hơn.</em>`
+                `<strong style="font-size: 0.88em;">👄 You have fuller lips </strong><br/> 💄<em style="font-size: 15px;"> Use matte lipstick or darker shades for a more harmonious look</em>`
             );
         } else {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">👄 Môi bạn khá nhỏ gọn </strong><br/> 💄<em style="font-size: 17px;"> Sử dụng son bóng hoặc tông màu tươi sáng để giúp môi trông căng mọng hơn.</em>`
+                `<strong style="font-size: 0.88em;">👄 Your lips are more petite </strong><br/> 💄<em style="font-size: 15px;"> Use glossy finishes or brighter colors to make your lips appear fuller</em>`
             );
         }
 
         // Nose recommendation
         if (features.noseWidth > 0.07) {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">👃 Mũi của bạn hơi rộng </strong><br/> 💄<em style="font-size: 17px;"> Tạo khối nhẹ hai bên sống mũi để tạo hiệu ứng thon gọn.</em>`
+                `<strong style="font-size: 0.88em;">👃 Your nose is slightly wider </strong><br/> 💄<em style="font-size: 15px;"> Apply subtle contour along the sides of your nose bridge for a slimming effect</em>`
             );
         } else {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">👃 Mũi bạn thon gọn </strong><br/> 💄<em style="font-size: 17px;"> Hãy tô chút highlight dọc sống mũi để tăng chiều sâu và nổi bật.</em>`
+                `<strong style="font-size: 0.88em;">👃 Your nose is slim </strong><br/> 💄<em style="font-size: 15px;"> Add a touch of highlight down the bridge to enhance depth and prominence</em>`
             );
         }
 
         // Eyebrow recommendation
         if (features.browLength < features.eyeDistance * 1.5) {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">👁️‍🗨️ Lông mày bạn ngắn và nhẹ </strong><br/> 💄<em style="font-size: 17px;"> Nên kẻ dài thêm một chút và tạo độ cong nhẹ để gương mặt hài hòa hơn.</em>`
+                `<strong style="font-size: 0.88em;">✨ Your eyebrows are shorter and lighter </strong><br/> 💄<em style="font-size: 15px;"> Extend them slightly and create a gentle arch for a more harmonious face</em>`
             );
         } else {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">👁️‍🗨️ Lông mày bạn khá dài và rõ nét </strong><br/> 💄<em style="font-size: 17px;"> Chỉ cần giữ dáng tự nhiên, không nên tô quá sắc để tránh làm khuôn mặt cứng.</em>`
+                `<strong style="font-size: 0.88em;">✨ Your eyebrows are longer and well-defined </strong><br/> 💄<em style="font-size: 15px;"> Maintain their natural shape without overdrawing to avoid a harsh look</em>`
             );
         }
 
         // Cheekbone recommendation
         if (features.cheekboneHeight < 0.4) {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">😊 Gò má bạn cao </strong><br/> 💄<em style="font-size: 17px;"> Hãy đánh má hồng thấp hơn xương gò má và tán ngang để làm dịu đường nét.</em>`
+                `<strong style="font-size: 0.88em;">⭐ Your cheekbones are high </strong><br/> 💄<em style="font-size: 15px;"> Apply blush below the cheekbone and blend horizontally to soften the angles</em>`
             );
         } else {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">😊 Gò má bạn thấp </strong><br/> 💄<em style="font-size: 17px;"> Nên tán má hồng cao và kéo dài lên thái dương để tạo hiệu ứng nâng mặt.</em>`
+                `<strong style="font-size: 0.88em;">⭐ Your cheekbones are lower </strong><br/> 💄<em style="font-size: 15px;"> Apply blush higher up and blend toward the temples for a lifting effect</em>`
             );
         }
 
         // Forehead recommendation
         if (features.foreheadHeight > 0.15) {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">🔍 Trán bạn cao </strong><br/> 💄<em style="font-size: 17px;"> Dùng phấn tối màu sát chân tóc để tạo cảm giác trán thấp hơn và mềm mại hơn.</em>`
+                `<strong style="font-size: 0.88em;">🌟 Your forehead is higher </strong><br/> 💄<em style="font-size: 15px;"> Use darker powder along the hairline to create the illusion of a lower forehead</em>`
             );
         } else {
             suggestions.push(
-                `<strong style="font-size: 0.88em;">🔍 Trán bạn thấp </strong><br/> 💄<em style="font-size: 17px;"> Có thể chải tóc ra sau hoặc highlight vùng trán để khuôn mặt cân đối hơn.</em>`
+                `<strong style="font-size: 0.88em;">🌟 Your forehead is lower </strong><br/> 💄<em style="font-size: 15px;"> Try styling hair away from your face or highlighting the forehead for better balance</em>`
             );
         }
 
-        // Filter selection UI
-        suggestions.push(`
-            <div style="margin-top: 15px; padding: 10px; background: rgba(255,182,193,0.1); border-radius: 8px;">
-                <strong style="font-size: 0.9em;">🎨 Thử các phong cách makeup khác:</strong>
-                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px;">
-                    <button data-filter="natural" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'natural' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'natural' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Tự nhiên</button>
-                    <button data-filter="glamour" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'glamour' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'glamour' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Quyến rũ</button>
-                    <button data-filter="soft" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'soft' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'soft' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Mềm mại</button>
-                    <button data-filter="dramatic" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'dramatic' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'dramatic' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Ấn tượng</button>
-                    <button data-filter="nude" style="padding: 8px 12px; border-radius: 20px; border: none; background: ${currentFilter === 'nude' ? '#d64161' : '#f8d0d8'}; color: ${currentFilter === 'nude' ? 'white' : '#333'}; cursor: pointer; font-size: 14px;">Nude</button>
-                </div>
-            </div>
-        `);
-
         return suggestions.join("<br/>");
-    }, [currentFilter]);
+    }, [currentFilter, filterDescriptions]);
 
-    // Handle filter buttons click
-    useEffect(() => {
-        const handleFilterClick = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            if (target.tagName === 'BUTTON' && target.dataset.filter) {
-                const filterName = target.dataset.filter as FilterType;
-                
-                // Skip if same filter or recently changed
-                if (filterName === currentFilter) return;
-                if (performance.now() - lastFilterChange.current < 300) return;
-                
-                lastFilterChange.current = performance.now();
-                setCurrentFilter(filterName);
-                shouldForceRender.current = true;
-                
-                // Update suggestion if we have facial features
-                if (facialFeaturesRef.current) {
-                    const suggestion = generateMakeupSuggestion(facialFeaturesRef.current);
-                    setMakeupSuggestion(suggestion);
-                }
-            }
-        };
-        
-        document.addEventListener('click', handleFilterClick);
-        return () => document.removeEventListener('click', handleFilterClick);
-    }, [currentFilter, generateMakeupSuggestion]);
-
-    // Handle keyboard shortcuts for filter selection
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (performance.now() - lastFilterChange.current < 300) return;
-            
-            let newFilter: FilterType | null = null;
-            
-            switch(e.key) {
-                case '1': newFilter = 'natural'; break;
-                case '2': newFilter = 'glamour'; break;
-                case '3': newFilter = 'soft'; break;
-                case '4': newFilter = 'dramatic'; break;
-                case '5': newFilter = 'nude'; break;
-            }
-            
-            if (newFilter && newFilter !== currentFilter) {
-                lastFilterChange.current = performance.now();
-                setCurrentFilter(newFilter);
-                shouldForceRender.current = true;
-                
-                if (facialFeaturesRef.current) {
-                    const suggestion = generateMakeupSuggestion(facialFeaturesRef.current);
-                    setMakeupSuggestion(suggestion);
-                }
-            }
-        };
-        
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentFilter, generateMakeupSuggestion]);
-
-    // Monitor face stability
+    // Monitor face stability and handle detection
     const checkFaceStability = useCallback((landmarks: NormalizedLandmark[]) => {
         if (!landmarks || landmarks.length < 468) return false;
         
@@ -461,6 +480,7 @@ export default function PersonalMakeup() {
             } else if (now - lastStableTime.current > STABILITY_DURATION && !isFrameStable) {
                 // Face has been stable for enough time
                 setIsFrameStable(true);
+                setShouldApplyMakeup(true);
                 setStatusMessage("Analysis completed!");
                 setProgress(100);
                 
@@ -480,6 +500,7 @@ export default function PersonalMakeup() {
                 lastStableTime.current = null;
                 if (isFrameStable) {
                     setIsFrameStable(false);
+                    setShouldApplyMakeup(false);
                     setStatusMessage("Please keep your face steady");
                     setProgress(20);
                 }
@@ -498,6 +519,7 @@ export default function PersonalMakeup() {
                 if (noFaceDetectedDuration > 1500) {
                     setStatusMessage("Face not detected. Please adjust your position.");
                     setProgress(0);
+                    setShouldApplyMakeup(false);
                 }
             }, 500);
             
@@ -509,7 +531,7 @@ export default function PersonalMakeup() {
 
     // Function to draw makeup on face
     const drawMakeup = useCallback((ctx: CanvasRenderingContext2D, landmarks: NormalizedLandmark[], width: number, height: number) => {
-        if (!landmarks || landmarks.length < 468) return;
+        if (!landmarks || landmarks.length < 468 || !shouldApplyMakeup) return;
         
         // Get current filter colors
         const colors = filterColors[currentFilter];
@@ -691,7 +713,16 @@ export default function PersonalMakeup() {
             
             ctx.restore();
         }
-    }, [currentFilter]);
+    }, [currentFilter, shouldApplyMakeup]);
+
+    // Update filter when clicking the filter button
+    useEffect(() => {
+        if (facialFeaturesRef.current && isFrameStable) {
+            const suggestion = generateMakeupSuggestion(facialFeaturesRef.current);
+            setMakeupSuggestion(suggestion);
+            shouldForceRender.current = true;
+        }
+    }, [currentFilter, generateMakeupSuggestion, isFrameStable]);
 
     // Main rendering loop
     useEffect(() => {
@@ -731,8 +762,14 @@ export default function PersonalMakeup() {
                 // Check stability
                 checkFaceStability(faceLandmarks);
                 
-                // Draw makeup
-                drawMakeup(ctx, faceLandmarks, canvas.width, canvas.height);
+                // Clear canvas first
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Only draw makeup if face is stable
+                if (shouldApplyMakeup) {
+                    // Draw makeup
+                    drawMakeup(ctx, faceLandmarks, canvas.width, canvas.height);
+                }
             } else if (noFaceDetectedDuration > 2000) {
                 // No face detected for a while, clear canvas
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -756,7 +793,8 @@ export default function PersonalMakeup() {
         checkFaceStability, 
         RENDER_INTERVAL,
         SKIP_FRAMES,
-        noFaceDetectedDuration
+        noFaceDetectedDuration,
+        shouldApplyMakeup
     ]);
 
     return (
@@ -770,6 +808,7 @@ export default function PersonalMakeup() {
             statusMessage={statusMessage}
             progress={progress}
             detectionResults={detectionResults}
+            selectionButtons={filterButtons}
         />
     );
 }
